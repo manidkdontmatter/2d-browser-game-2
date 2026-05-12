@@ -61,5 +61,10 @@ export function findManagedMap(id: string): ManagedMapConfig | undefined {
 }
 
 export function mapWebSocketUrl(map: ManagedMapConfig, host = '127.0.0.1'): string {
+  const publicWsBaseUrl = process.env.PUBLIC_WS_BASE_URL;
+  if (publicWsBaseUrl) {
+    return `${publicWsBaseUrl.replace(/\/+$/, '')}/${map.id}`;
+  }
+
   return `ws://${host}:${map.port}`;
 }

@@ -52,7 +52,7 @@ async function boot(): Promise<void> {
     setInvincible: (enabled) => connection.setDebugInvincible(enabled),
   });
   window.addEventListener('keydown', (event) => uiState.handleGlobalKeyDown(event));
-  void connection.connect();
+  void connection.connect(resolveInitialMapWebSocketUrl());
   let previousTickAtMs = performance.now();
   let inputCommandAccumulatorMs = 0;
   let outboundFlushAccumulatorMs = 0;
@@ -122,4 +122,19 @@ async function boot(): Promise<void> {
       tick();
     }
   };
+}
+
+function resolveInitialMapWebSocketUrl(): string {
+  const configuredUrl = import.meta.env.VITE_GAME_WS_URL as string | undefined;
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  const isLocalDevHost = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
+  if (isLocalDevHost) {
+    return 'ws://127.0.0.1:9001';
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/test-map-a`;
 }
