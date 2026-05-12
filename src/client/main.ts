@@ -9,6 +9,7 @@ import { ClientDiagnostics } from './diagnostics/clientDiagnostics.js';
 import { DiagnosticsPanel } from './diagnostics/diagnosticsPanel.js';
 import { NpcDebugPanel } from './diagnostics/npcDebugPanel.js';
 import { CommandStream } from './net/commandStream.js';
+import { AlertSystem } from './ui/alertSystem.js';
 import { MainUiOverlay } from './ui/mainUiOverlay.js';
 import { UiStateController } from './ui/uiStateController.js';
 
@@ -61,6 +62,9 @@ async function boot(): Promise<void> {
     spawnNpcs: (count) => connection.spawnDebugNpcs(count),
     setInvincible: (enabled) => connection.setDebugInvincible(enabled),
   });
+  const alertSystem = new AlertSystem();
+  let nextTestAlertAtMs = performance.now() + 30000;
+
   window.addEventListener('keydown', (event) => uiState.handleGlobalKeyDown(event));
   void connection.connect(resolveInitialMapWebSocketUrl());
   let previousTickAtMs = performance.now();
@@ -70,6 +74,11 @@ async function boot(): Promise<void> {
     const elapsedMs = Math.max(0, nowMs - previousTickAtMs);
     previousTickAtMs = nowMs;
     diagnostics.recordFrame(nowMs);
+    alertSystem.tick(nowMs);
+    if (nowMs >= nextTestAlertAtMs) {
+      alertSystem.show('Test alert — the alert system is working.');
+      nextTestAlertAtMs = nowMs + 30000;
+    }
     connection.pump(nowMs);
 
     if (input.getMode() === ClientInputMode.Gameplay) {

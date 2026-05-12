@@ -34,6 +34,7 @@ interface TileChunkView {
   revision: string;
 }
 
+const RENDER_SCALE = 0.5;
 const TILE_CHUNK_SIZE = CLIENT_TILE_CHUNK_SIZE;
 const TILE_CHUNK_WORLD_SIZE = TILE_CHUNK_SIZE * TILE_SIZE;
 const TILE_CHUNK_MARGIN = 1;
@@ -72,6 +73,7 @@ export class GameRenderer {
     root.appendChild(this.app.canvas);
     await this.assets.preloadGroup('boot');
     this.primeTileTexturesFromCache();
+    this.world.scale.set(RENDER_SCALE);
     this.world.addChild(this.tileLayer);
     this.world.addChild(this.meleeDiagnosticGraphics);
     this.world.addChild(this.entityLayer);
@@ -95,8 +97,8 @@ export class GameRenderer {
 
   screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
     return {
-      x: screenX - this.world.x,
-      y: screenY - this.world.y,
+      x: screenX / RENDER_SCALE - this.world.x,
+      y: screenY / RENDER_SCALE - this.world.y,
     };
   }
 
@@ -134,8 +136,8 @@ export class GameRenderer {
 
     const minWorldX = -this.world.x;
     const minWorldY = -this.world.y;
-    const maxWorldX = minWorldX + this.app.screen.width;
-    const maxWorldY = minWorldY + this.app.screen.height;
+    const maxWorldX = minWorldX + this.app.screen.width / RENDER_SCALE;
+    const maxWorldY = minWorldY + this.app.screen.height / RENDER_SCALE;
     const minChunkX = Math.max(0, Math.floor(minWorldX / TILE_CHUNK_WORLD_SIZE) - TILE_CHUNK_MARGIN);
     const minChunkY = Math.max(0, Math.floor(minWorldY / TILE_CHUNK_WORLD_SIZE) - TILE_CHUNK_MARGIN);
     const maxChunkX = Math.min(Math.ceil(map.width / TILE_CHUNK_SIZE) - 1, Math.floor(maxWorldX / TILE_CHUNK_WORLD_SIZE) + TILE_CHUNK_MARGIN);
@@ -223,8 +225,8 @@ export class GameRenderer {
     }
 
     const position = localPresentation ?? local;
-    this.world.x = this.app.screen.width / 2 - position.x;
-    this.world.y = this.app.screen.height / 2 - position.y;
+    this.world.x = this.app.screen.width / 2 / RENDER_SCALE - position.x;
+    this.world.y = this.app.screen.height / 2 / RENDER_SCALE - position.y;
   }
 
   private syncEntities(localPresentation: LocalPresentationPosition | null): void {
