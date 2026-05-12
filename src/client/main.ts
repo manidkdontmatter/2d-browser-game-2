@@ -57,6 +57,7 @@ async function boot(): Promise<void> {
   const diagnosticsPanel = new DiagnosticsPanel(diagnostics, {
     getClientSidePredictionEnabled: () => connection.isClientSidePredictionEnabled(),
     setClientSidePredictionEnabled: (enabled) => connection.setClientSidePredictionEnabled(enabled),
+    getCameraZoom: () => renderer.getCameraZoom(),
   });
   new NpcDebugPanel({
     spawnNpcs: (count) => connection.spawnDebugNpcs(count),

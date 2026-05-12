@@ -4,6 +4,7 @@ import { ClientDiagnostics, DiagnosticsSnapshot } from './clientDiagnostics.js';
 export interface DiagnosticsPanelOptions {
   getClientSidePredictionEnabled?: () => boolean;
   setClientSidePredictionEnabled?: (enabled: boolean) => void;
+  getCameraZoom?: () => number;
 }
 
 export class DiagnosticsPanel {
@@ -46,6 +47,7 @@ export class DiagnosticsPanel {
     this.addRow('map', 'Map');
     this.addRow('mapReady', 'Map ready');
     this.addRow('seed', 'Seed');
+    this.addRow('zoom', 'Zoom');
     document.body.appendChild(this.element);
   }
 
@@ -82,6 +84,7 @@ export class DiagnosticsPanel {
     this.setRow('map', snapshot.mapName || snapshot.mapId || '-', snapshot.mapId ? 'ok' : 'warn');
     this.setRow('mapReady', snapshot.mapReady ? 'yes' : 'no', snapshot.mapReady ? 'ok' : 'warn');
     this.setRow('seed', snapshot.worldSeed ?? '-', 'neutral');
+    this.setRow('zoom', (this.options.getCameraZoom?.() ?? 1).toFixed(2), 'neutral');
   }
 
   private addRow(id: string, label: string): void {

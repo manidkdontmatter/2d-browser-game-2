@@ -34,6 +34,11 @@ interface TileChunkView {
   revision: string;
 }
 
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 2.0;
+const ZOOM_STEP = 0.001;
+const DEFAULT_ZOOM = 1.0;
+
 const TILE_CHUNK_SIZE = CLIENT_TILE_CHUNK_SIZE;
 const TILE_CHUNK_WORLD_SIZE = TILE_CHUNK_SIZE * TILE_SIZE;
 const TILE_CHUNK_MARGIN = 1;
@@ -55,8 +60,13 @@ export class GameRenderer {
   private readonly tileChunks = new Map<string, TileChunkView>();
   private readonly tileTextures = new Map<TileType, Texture>();
   private readonly assets = new AssetLoader();
+  private zoom = DEFAULT_ZOOM;
 
   constructor(private readonly state: ClientWorldState) {}
+
+  getCameraZoom(): number {
+    return this.zoom;
+  }
 
   async mount(root: HTMLElement): Promise<void> {
     await this.app.init({
@@ -70,6 +80,7 @@ export class GameRenderer {
       powerPreference: 'high-performance',
     });
     root.appendChild(this.app.canvas);
+    this.app.canvas.addEventListener('wheel', (event) => this.handleWheel(event));
     await this.assets.preloadGroup('boot');
     this.primeTileTexturesFromCache();
     this.world.addChild(this.tileLayer);
@@ -95,12 +106,13 @@ export class GameRenderer {
 
   screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
     return {
-      x: screenX - this.world.x,
-      y: screenY - this.world.y,
+      x: (screenX - this.world.x) / this.zoom,
+      y: (screenY - this.world.y) / this.zoom,
     };
   }
 
   render(localPresentation: LocalPresentationPosition | null, nowMs: number): void {
+    this.world.scale.set(this.zoom);
     this.centerCamera(localPresentation);
     this.syncVisibleTileChunks();
     this.drawMeleeDiagnostics(nowMs);
@@ -121,8 +133,26 @@ export class GameRenderer {
       visibleEntities: Array.from(this.state.entities.values()).slice(0, 20).map(compactEntity),
       activeTileChunks: this.tileChunks.size,
       entityViews: this.entityViews.size,
+      zoom: this.zoom,
     };
     return JSON.stringify(payload);
+  }
+
+  private handleWheel(event: WheelEvent): void {
+    event.preventDefault();
+    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.zoom * (1 - event.deltaY * ZOOM_STEP)));
+    if (newZoom === this.zoom) {
+      return;
+    }
+
+    // Zoom toward the mouse cursor — keep the world point under the cursor stationary.
+    const mouseX = event.clientX;
+    const mouseY = event.clientY;
+    const worldX = (mouseX - this.world.x) / this.zoom;
+    const worldY = (mouseY - this.world.y) / this.zoom;
+    this.zoom = newZoom;
+    this.world.x = mouseX - worldX * this.zoom;
+    this.world.y = mouseY - worldY * this.zoom;
   }
 
   private syncVisibleTileChunks(): void {
@@ -132,10 +162,11 @@ export class GameRenderer {
       return;
     }
 
-    const minWorldX = -this.world.x;
-    const minWorldY = -this.world.y;
-    const maxWorldX = minWorldX + this.app.screen.width;
-    const maxWorldY = minWorldY + this.app.screen.height;
+    const invZoom = 1 / this.zoom;
+    const minWorldX = -this.world.x * invZoom;
+    const minWorldY = -this.world.y * invZoom;
+    const maxWorldX = (this.app.screen.width - this.world.x) * invZoom;
+    const maxWorldY = (this.app.screen.height - this.world.y) * invZoom;
     const minChunkX = Math.max(0, Math.floor(minWorldX / TILE_CHUNK_WORLD_SIZE) - TILE_CHUNK_MARGIN);
     const minChunkY = Math.max(0, Math.floor(minWorldY / TILE_CHUNK_WORLD_SIZE) - TILE_CHUNK_MARGIN);
     const maxChunkX = Math.min(Math.ceil(map.width / TILE_CHUNK_SIZE) - 1, Math.floor(maxWorldX / TILE_CHUNK_WORLD_SIZE) + TILE_CHUNK_MARGIN);
@@ -223,8 +254,8 @@ export class GameRenderer {
     }
 
     const position = localPresentation ?? local;
-    this.world.x = this.app.screen.width / 2 - position.x;
-    this.world.y = this.app.screen.height / 2 - position.y;
+    this.world.x = this.app.screen.width / 2 - position.x * this.zoom;
+    this.world.y = this.app.screen.height / 2 - position.y * this.zoom;
   }
 
   private syncEntities(localPresentation: LocalPresentationPosition | null): void {
