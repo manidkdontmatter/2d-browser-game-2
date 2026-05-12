@@ -2,7 +2,7 @@
 import { NET_TIMING } from './net/timing.js';
 
 // ---- Tile & world ----
-export const TILE_SIZE = 128;
+export const TILE_SIZE = 64;
 export const TEST_MAP_WIDTH = 100;
 export const TEST_MAP_HEIGHT = 100;
 export const GENERATOR_VERSION = 1;
