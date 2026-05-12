@@ -1,0 +1,12 @@
+# Keeps generated dependencies, builds, logs, and local server data out of source control.
+node_modules/
+dist/
+data/
+output/
+*.log
+*-smoke.out
+*-smoke.err
+dev-server.out
+dev-server.err
+server-smoke.out
+server-smoke.err
