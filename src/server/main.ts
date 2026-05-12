@@ -40,20 +40,26 @@ function spawnMapRuntime(map: ManagedMapConfig): ChildProcess {
     env: {
       ...process.env,
       MAP_ID: map.id,
-      MAP_NAME: map.name,
-      MAP_SEED: map.seed,
-      MAP_GENERATION_SETTINGS_JSON: JSON.stringify(map.generation),
-      MAP_PORT: String(map.port),
-      MAP_DB_PATH: map.dbPath,
-      MAP_TARGET_ID: target.id,
-      MAP_TARGET_NAME: target.name,
-      MAP_TARGET_URL: mapWebSocketUrl(target),
-      MAP_TRANSFER_TOKEN: `${map.id}->${target.id}`,
-      MAP_ACCEPTED_TOKENS: acceptedTokensForMap(map).join(','),
     },
     stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     windowsHide: true,
   });
+
+  const runtimeConfig = {
+    id: map.id,
+    name: map.name,
+    seed: map.seed,
+    generation: map.generation,
+    port: map.port,
+    dbPath: map.dbPath,
+    targetMapId: target.id,
+    targetMapName: target.name,
+    targetUrl: mapWebSocketUrl(target),
+    transferToken: `${map.id}->${target.id}`,
+    acceptedTokens: acceptedTokensForMap(map),
+  };
+
+  child.send({ type: 'mapRuntimeConfig', config: runtimeConfig });
 
   child.on('message', (message) => {
     if (isStartedMessage(message)) {

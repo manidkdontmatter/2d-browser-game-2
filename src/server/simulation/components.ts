@@ -59,3 +59,8 @@ export const NpcBrain = {
   lastKnownTargetX: [] as number[],
   lastKnownTargetY: [] as number[],
 };
+
+export const Stamina = {
+  current: [] as number[],
+  max: [] as number[],
+};

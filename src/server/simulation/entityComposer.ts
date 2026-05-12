@@ -2,6 +2,7 @@
 import { addComponent, addEntity, hasComponent, removeComponent, removeEntity } from 'bitecs';
 import { type BodyRecipe, type EntityRecipeId, type ProjectileRecipe } from '../../shared/entities/entityRecipes.js';
 import { ContentRegistry } from '../content/contentRegistry.js';
+import type { StatsSystem } from '../systems/statsSystem.js';
 import {
   Active,
   Appearance,
@@ -15,6 +16,7 @@ import {
   PhysicsBodyRef,
   Position,
   Projectile,
+  Stamina,
   Velocity,
 } from './components.js';
 import { bodyLayer, wallLayer } from './layers.js';
@@ -26,7 +28,13 @@ export interface EntitySpawnPosition {
 }
 
 export class EntityComposer {
+  private statsSystem: StatsSystem | null = null;
+
   constructor(private readonly world: SimulationWorld, private readonly content: ContentRegistry) {}
+
+  setStatsSystem(statsSystem: StatsSystem): void {
+    this.statsSystem = statsSystem;
+  }
 
   createFromRecipe(recipeId: EntityRecipeId, position: EntitySpawnPosition): number {
     const recipe = this.content.getEntityRecipe(recipeId);
@@ -79,6 +87,7 @@ export class EntityComposer {
     this.world.removePhysicsBody(entityId);
     this.world.eidByEntityId.delete(entityId);
     this.world.netEntities.delete(entityId);
+    this.statsSystem?.removeStats(entityId);
   }
 
   resetBody(entityId: number, position: EntitySpawnPosition): void {
@@ -93,6 +102,9 @@ export class EntityComposer {
     Velocity.x[eid] = 0;
     Velocity.y[eid] = 0;
     Health.current[eid] = Health.max[eid];
+    if (hasComponent(this.world.ecs, eid, Stamina)) {
+      Stamina.current[eid] = Stamina.max[eid];
+    }
     Facing.direction[eid] = 1;
     body.setPosition(position.x, position.y);
     body.setVelocity(0, 0);
@@ -173,6 +185,7 @@ export class EntityComposer {
     PhysicsBodyRef.bodyId[eid] = body.id;
     this.world.bodyByEntityId.set(entityId, body);
     this.world.entityIdByBodyId.set(body.id, entityId);
+    this.statsSystem?.initializeCharacterStats(entityId);
   }
 
   private addProjectileComposition(eid: number, recipe: ProjectileRecipe): void {

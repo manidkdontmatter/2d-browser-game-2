@@ -37,11 +37,11 @@ export class InputController {
   constructor(private readonly element: HTMLElement) {
     window.addEventListener('keydown', (event) => this.onKey(event.code, true));
     window.addEventListener('keyup', (event) => this.onKey(event.code, false));
-    element.addEventListener('mousemove', (event) => {
+    window.addEventListener('mousemove', (event) => {
       this.state.mouseX = event.clientX;
       this.state.mouseY = event.clientY;
     });
-    element.addEventListener('contextmenu', (event) => event.preventDefault());
+    window.addEventListener('contextmenu', (event) => event.preventDefault());
     element.addEventListener('mousedown', (event) => {
       if (this.mode !== ClientInputMode.Gameplay) {
         return;

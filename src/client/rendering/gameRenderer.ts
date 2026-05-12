@@ -3,6 +3,7 @@ import { Application, Container, Graphics, Texture } from 'pixi.js';
 import { CompositeTilemap } from '@pixi/tilemap';
 import { MELEE_RANGE, TILE_SIZE } from '../../shared/config.js';
 import { NetEntityKind } from '../../shared/domain/snapshots.js';
+import { coordKey } from '../../shared/math/vector.js';
 import { TileType } from '../../shared/world/mapTypes.js';
 import { getTileDefinition, renderableTileTypes } from '../../shared/world/tileDefinitions.js';
 import { AssetLoader } from '../assets/index.js';
@@ -49,7 +50,6 @@ export class GameRenderer {
   private readonly tileLayer = new Container();
   private readonly meleeDiagnosticGraphics = new Graphics();
   private readonly entityLayer = new Container();
-  private readonly reticle = new Graphics();
   private readonly meleeDiagnosticEffects: MeleeDiagnosticEffect[] = [];
   private readonly entityViews = new Map<number, EntityView>();
   private readonly tileChunks = new Map<string, TileChunkView>();
@@ -76,10 +76,9 @@ export class GameRenderer {
     this.world.addChild(this.meleeDiagnosticGraphics);
     this.world.addChild(this.entityLayer);
     this.app.stage.addChild(this.world);
-    this.app.stage.addChild(this.reticle);
   }
 
-  showMeleeDiagnostic(aimX: number, aimY: number): void {
+  showMeleeDiagnostic(aimX: number, aimY: number, nowMs: number): void {
     const local = this.state.getLocalEntity();
     if (!local) {
       return;
@@ -90,7 +89,7 @@ export class GameRenderer {
       originY: local.y,
       aimX,
       aimY,
-      startedAtMs: performance.now(),
+      startedAtMs: nowMs,
     });
   }
 
@@ -101,12 +100,11 @@ export class GameRenderer {
     };
   }
 
-  render(mouseX: number, mouseY: number, localPresentation: LocalPresentationPosition | null): void {
+  render(localPresentation: LocalPresentationPosition | null, nowMs: number): void {
     this.centerCamera(localPresentation);
     this.syncVisibleTileChunks();
-    this.drawMeleeDiagnostics();
+    this.drawMeleeDiagnostics(nowMs);
     this.syncEntities(localPresentation);
-    this.drawReticle(mouseX, mouseY);
   }
 
   renderGameToText(): string {
@@ -146,7 +144,7 @@ export class GameRenderer {
 
     for (let chunkY = minChunkY; chunkY <= maxChunkY; chunkY += 1) {
       for (let chunkX = minChunkX; chunkX <= maxChunkX; chunkX += 1) {
-        const key = chunkKey(chunkX, chunkY);
+        const key = coordKey(chunkX, chunkY);
         visibleKeys.add(key);
         const existing = this.tileChunks.get(key);
         const revision = this.state.getTileChunkRevision(chunkX, chunkY);
@@ -305,19 +303,18 @@ export class GameRenderer {
     return entity;
   }
 
-  private drawMeleeDiagnostics(): void {
-    const now = performance.now();
+  private drawMeleeDiagnostics(nowMs: number): void {
     const lifetimeMs = 220;
     this.meleeDiagnosticGraphics.clear();
 
     for (let i = this.meleeDiagnosticEffects.length - 1; i >= 0; i -= 1) {
-      if (now - this.meleeDiagnosticEffects[i].startedAtMs > lifetimeMs) {
+      if (nowMs - this.meleeDiagnosticEffects[i].startedAtMs > lifetimeMs) {
         this.meleeDiagnosticEffects.splice(i, 1);
       }
     }
 
     for (const effect of this.meleeDiagnosticEffects) {
-      const age = (now - effect.startedAtMs) / lifetimeMs;
+      const age = (nowMs - effect.startedAtMs) / lifetimeMs;
       const alpha = Math.max(0, 1 - age);
       const direction = Math.atan2(effect.aimY - effect.originY, effect.aimX - effect.originX);
       const halfAngle = Math.acos(0.25);
@@ -337,15 +334,6 @@ export class GameRenderer {
     }
   }
 
-  private drawReticle(mouseX: number, mouseY: number): void {
-    this.reticle.clear();
-    this.reticle.circle(mouseX, mouseY, 4);
-    this.reticle.fill('#f1f5f0');
-  }
-}
-
-function chunkKey(chunkX: number, chunkY: number): string {
-  return `${chunkX}:${chunkY}`;
 }
 
 function textureIndexForTile(tile: TileType): number {

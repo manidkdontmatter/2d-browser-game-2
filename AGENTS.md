@@ -1,3 +1,5 @@
+read todo.txt and tell the user to as well
+
 # Game
 
 - to sum it up, ultimately we are making a typical 2d topdown multiplayer sandbox game, full production quality, with all the important features typical 2d topdown multiplayer sandbox games have
@@ -12,6 +14,8 @@
 
 # Technical
 
+- this game is made for desktop users to play, no mobile support is explicitly required
+- dev environment is windows, not linux, very important for knowing whether to use powershell or whatever else
 - uses typescript, node, npm, bitecs, vite, is a browser game
 - it uses nengi for netcode, nengi 2.0, which is a branch on github i think
 - pixi for client
@@ -26,6 +30,8 @@
 
 # Guidelines
 
+- always read the README.md at the start of a conversation
+- this project is entirely AI written and maintained, human hands have never touched it. YOU are the AI who wrote and maintains it, you just don't remember probably. that means even the README.md was written by you.
 - this codebase either is or will be huge, so to search it you should be efficient, i would bet however you navigate a codebase by default is already efficient, but i'm just saying just in case. obviously you would not want to open a gajillion script files blindly.
 - do everything production quality. no prototype or stop gap quality. this isn't a tutorial or demo this is a real production game but is in the early stages which means it is fully malleable because we need it to be so we can make sure we are creating the game correctly and not creating technical debt by working around things that shouldn't even be how they are to begin with. we must correct anything that shouldn't be how it is, not circumvent around it or patch it or any hacky solutions. no hacky solutions, proper architecture and software design at all times including down to the game design patterns used. there are known solutions for nearly everything in game development.
 - do not use vertical slice ideology as a goal or planning default. Do not waste development time making temporary vertical slices; build full production quality systems from the start, with durable architecture and clear long-term ownership
@@ -58,3 +64,4 @@
 - if you notice yourself making the same kind of mistake repeatedly, point out the pattern to the user, explain the likely cause, and ask whether to change approach. Suggest a better default behavior
 - preserve architectural intent over short-term convenience. Keep boundaries clear, avoid hidden coupling, and make the correct path easy for future changes
 - do not create or maintain a progress.md file nor store contents thereof anywhere else, if progress.md exists delete it
+- not make ui elements canvas based. any that are already canvas based need made not canvas based

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ATTACK_RATE_LIMIT_MS, CHARACTER_MAX_HEALTH, MELEE_DAMAGE, MELEE_RANGE, NPC_RESPAWN_SECONDS, PLAYER_MOVE_SPEED, PROJECTILE_SPEED } from '../../src/shared/config.js';
 import { AttackIntent, ControllerKind, PlayerCommand } from '../../src/shared/domain/commands.js';
 import { NET_TIMING } from '../../src/shared/net/timing.js';
+import { NetEntityKind } from '../../src/shared/domain/snapshots.js';
 import { TileType } from '../../src/shared/world/mapTypes.js';
 import { GameSimulation } from '../../src/server/simulation/gameSimulation.js';
 import { Health, MindLink, Position, Velocity } from '../../src/server/simulation/components.js';
@@ -16,7 +17,7 @@ describe('authoritative game simulation', () => {
 
     const snapshots = simulation.getSnapshots();
     expect(snapshots.some((snapshot) => snapshot.entityId === playerId)).toBe(true);
-    expect(snapshots.filter((snapshot) => snapshot.kind === 'body')).toHaveLength(4);
+    expect(snapshots.filter((snapshot) => snapshot.kind === NetEntityKind.Body)).toHaveLength(4);
   });
 
   it('replicates map portals and resolves transfer targets from entity proximity', () => {
@@ -32,7 +33,7 @@ describe('authoritative game simulation', () => {
     Position.x[eid] = portal.x;
     Position.y[eid] = portal.y;
 
-    expect(simulation.getSnapshots().some((snapshot) => snapshot.kind === 'portal')).toBe(true);
+    expect(simulation.getSnapshots().some((snapshot) => snapshot.kind === NetEntityKind.Portal)).toBe(true);
     expect(simulation.findPortalTransferForEntity(playerId)?.targetMapId).toBe('test-map-b');
   });
 
@@ -181,7 +182,7 @@ describe('authoritative game simulation', () => {
     }));
     simulation.step();
 
-    expect(simulation.getSnapshots().some((snapshot) => snapshot.kind === 'projectile')).toBe(true);
+    expect(simulation.getSnapshots().some((snapshot) => snapshot.kind === NetEntityKind.Projectile)).toBe(true);
   });
 
   it('transfers a mind into a nonstandard controllable body', () => {
@@ -220,7 +221,7 @@ describe('authoritative game simulation', () => {
     simulation.step(1 / 30);
 
     const player = simulation.getSnapshots().find((snapshot) => snapshot.entityId === playerId)!;
-    const projectile = simulation.getSnapshots().find((snapshot) => snapshot.kind === 'projectile')!;
+    const projectile = simulation.getSnapshots().find((snapshot) => snapshot.kind === NetEntityKind.Projectile)!;
     expect(player.x).toBeGreaterThan(before.x);
     expect(projectile.x).toBeCloseTo(player.x + PROJECTILE_SPEED / 30, 1);
   });
@@ -235,7 +236,7 @@ describe('authoritative game simulation', () => {
       sequence: 1,
     }));
     simulation.step();
-    const projectile = simulation.getSnapshots().find((snapshot) => snapshot.kind === 'projectile');
+    const projectile = simulation.getSnapshots().find((snapshot) => snapshot.kind === NetEntityKind.Projectile);
     expect(projectile).toBeDefined();
     const projectileEid = simulation.world.eidByEntityId.get(projectile!.entityId);
 
@@ -388,7 +389,7 @@ describe('authoritative game simulation', () => {
 
     const closestNpcDistance = Math.min(
       ...snapshots
-        .filter((snapshot) => snapshot.kind === 'body' && snapshot.entityId !== playerId)
+        .filter((snapshot) => snapshot.kind === NetEntityKind.Body && snapshot.entityId !== playerId)
         .map((snapshot) => Math.hypot(snapshot.x - player!.x, snapshot.y - player!.y)),
     );
 

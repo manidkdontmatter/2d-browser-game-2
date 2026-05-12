@@ -31,6 +31,10 @@ export function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+export function coordKey(x: number, y: number): string {
+  return `${x}:${y}`;
+}
+
 export function tileCenter(tileX: number, tileY: number, tileSize: number): Vec2 {
   return {
     x: tileX * tileSize + tileSize / 2,

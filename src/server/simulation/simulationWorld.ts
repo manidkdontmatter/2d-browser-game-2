@@ -9,6 +9,7 @@ import { tileIndex } from '../../shared/world/mapTypes.js';
 import { TileMapView } from '../../shared/world/tileMap.js';
 import { NType } from '../../shared/net/nType.js';
 import { GridPoint } from '../../shared/pathfinding/aStar.js';
+import type { AllocatedStats, DerivedStats } from '../../shared/stats/characterStats.js';
 import { SpawnPoint } from './types.js';
 import { Position } from './components.js';
 import { TileCollisionSystem } from '../systems/tileCollisionSystem.js';
@@ -32,6 +33,8 @@ export class SimulationWorld {
   readonly entityIdByBodyId = new Map<number, number>();
   readonly netEntities = new Map<number, NetEntityRecord>();
   readonly npcPaths = new Map<number, NpcPathCache>();
+  readonly allocatedStats = new Map<number, AllocatedStats>();
+  readonly derivedStats = new Map<number, DerivedStats>();
   readonly spawnCandidates: SpawnPoint[];
   private readonly spawnCandidateIndexByTileIndex = new Map<number, number>();
 

@@ -1,6 +1,19 @@
 // Orchestrates hostile NPC AI through budgeted Sense/Plan/Act phases for scalable authoritative behavior.
 import { query, type EntityId } from 'bitecs';
-import { MELEE_RANGE, NPC_DECISION_INTERVAL_SECONDS, TILE_SIZE } from '../../shared/config.js';
+import {
+  AI_MAX_PLAN_PER_TICK,
+  AI_MAX_SENSE_PER_TICK,
+  AI_WAKE_GRACE_MS,
+  MELEE_RANGE,
+  NPC_DECISION_INTERVAL_SECONDS,
+  NPC_MAX_REPATHS_PER_TICK,
+  NPC_REPATH_DISTANCE_TILES,
+  NPC_REPATH_INTERVAL_MS,
+  NPC_TARGET_ACQUIRE_RANGE,
+  NPC_TARGET_LOSE_RANGE_FACTOR,
+  NPC_PATH_POINT_REACHED_EPSILON,
+  TILE_SIZE,
+} from '../../shared/config.js';
 import { AttackIntent, ControlIntent, ControllerKind } from '../../shared/domain/commands.js';
 import { distance, normalize, tileCenter } from '../../shared/math/vector.js';
 import { findPath, GridPoint } from '../../shared/pathfinding/aStar.js';
@@ -13,12 +26,7 @@ import { AreaActivationSystem } from './areaActivationSystem.js';
 import { SpatialQuerySystem } from './spatialQuerySystem.js';
 import { AiSchedulerSystem } from './aiSchedulerSystem.js';
 
-const NPC_TARGET_ACQUIRE_RANGE_WORLD = 700;
-const NPC_TARGET_LOSE_RANGE_WORLD = NPC_TARGET_ACQUIRE_RANGE_WORLD * 1.35;
-const NPC_REPATH_INTERVAL_MS = 900;
-const NPC_REPATH_DISTANCE_TILES = 2;
-const NPC_MAX_REPATHS_PER_TICK = 48;
-const PATH_POINT_REACHED_WORLD_EPSILON = TILE_SIZE * 0.2;
+const NPC_TARGET_LOSE_RANGE_WORLD = NPC_TARGET_ACQUIRE_RANGE * NPC_TARGET_LOSE_RANGE_FACTOR;
 
 enum NpcAiState {
   Idle = 0,
@@ -30,11 +38,11 @@ export class AiSystem {
   private simulationTimeMs = 0;
   private repathsThisTick = 0;
   private readonly scheduler = new AiSchedulerSystem({
-    maxSensePerTick: 320,
-    maxPlanPerTick: 220,
+    maxSensePerTick: AI_MAX_SENSE_PER_TICK,
+    maxPlanPerTick: AI_MAX_PLAN_PER_TICK,
     defaultSenseIntervalMs: Math.round(NPC_DECISION_INTERVAL_SECONDS * 1000),
     defaultPlanIntervalMs: Math.round(NPC_DECISION_INTERVAL_SECONDS * 1000 * 1.2),
-    wakeGraceMs: 900,
+    wakeGraceMs: AI_WAKE_GRACE_MS,
   });
 
   constructor(
@@ -100,7 +108,7 @@ export class AiSystem {
       }
     }
 
-    const nearest = this.spatialQuery.findNearestHumanInRadius(self.x, self.y, NPC_TARGET_ACQUIRE_RANGE_WORLD);
+    const nearest = this.spatialQuery.findNearestHumanInRadius(self.x, self.y, NPC_TARGET_ACQUIRE_RANGE);
     const bestEntityId = nearest?.entityId ?? 0;
     NpcBrain.targetEntityId[eid] = bestEntityId;
 
@@ -249,7 +257,7 @@ export class AiSystem {
     let index = Math.max(1, Math.min(NpcBrain.pathIndex[eid] || 1, path.length - 1));
     while (index < path.length - 1) {
       const point = tileCenter(path[index].x, path[index].y, TILE_SIZE);
-      if (Math.hypot(point.x - self.x, point.y - self.y) > PATH_POINT_REACHED_WORLD_EPSILON) {
+      if (Math.hypot(point.x - self.x, point.y - self.y) > NPC_PATH_POINT_REACHED_EPSILON) {
         break;
       }
       index += 1;

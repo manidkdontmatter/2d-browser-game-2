@@ -2,6 +2,7 @@
 import { Channel, ChannelAABB2D, Instance, NetworkEvent, type User } from 'nengi';
 import { uWebSocketsInstanceAdapter } from 'nengi-uws-instance-adapter';
 import { DEFAULT_AOI_HEIGHT, DEFAULT_AOI_WIDTH, TILE_SIZE } from '../../shared/config.js';
+import { coordKey } from '../../shared/math/vector.js';
 import type { MapTransferPayload } from '../../shared/net/messages.js';
 import { tileMutationToPayload, worldIdentityToInitPayload } from '../../shared/net/messages.js';
 import { ncontext } from '../../shared/net/context.js';
@@ -9,6 +10,8 @@ import { NType } from '../../shared/net/nType.js';
 import { validateInputCommand } from '../../shared/net/commandValidation.js';
 import { parseDebugInvincibleEnabled, parseDebugNpcSpawnCount } from '../../shared/net/debugRequests.js';
 import { RequestEndpoint } from '../../shared/net/requestEndpoints.js';
+import type { AllocateStatRequest, CharacterStatsResponse, RemoveStatRequest } from '../../shared/net/statRequests.js';
+import { totalAllocatedPoints } from '../../shared/stats/characterStats.js';
 import { NET_TIMING, SNAPSHOT_INTERVAL_SECONDS } from '../../shared/net/timing.js';
 import type { TileMutation } from '../../shared/world/mapTypes.js';
 import { GameSimulation } from '../simulation/gameSimulation.js';
@@ -85,6 +88,43 @@ export class NengiServer {
 
       const enabled = this.simulation.setEntityInvincible(entityId, parseDebugInvincibleEnabled(body));
       send({ enabled });
+    });
+    this.instance.respond(RequestEndpoint.GetCharacterStats, ({ user }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send(null);
+        return;
+      }
+      send(this.buildCharacterStatsResponse(entityId));
+    });
+    this.instance.respond(RequestEndpoint.AllocateStat, ({ user, body }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send(null);
+        return;
+      }
+      const request = body as AllocateStatRequest;
+      this.simulation.stats.allocatePoint(entityId, request.statId);
+      send(this.buildCharacterStatsResponse(entityId));
+    });
+    this.instance.respond(RequestEndpoint.RemoveStat, ({ user, body }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send(null);
+        return;
+      }
+      const request = body as RemoveStatRequest;
+      this.simulation.stats.removePoint(entityId, request.statId);
+      send(this.buildCharacterStatsResponse(entityId));
+    });
+    this.instance.respond(RequestEndpoint.ResetStats, ({ user }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send(null);
+        return;
+      }
+      this.simulation.stats.resetAllocations(entityId);
+      send(this.buildCharacterStatsResponse(entityId));
     });
   }
 
@@ -328,7 +368,7 @@ export class NengiServer {
       return;
     }
 
-    const key = tileMutationCoordKey(mutation.x, mutation.y);
+    const key = coordKey(mutation.x, mutation.y);
     if (sentTiles.get(key) === mutation.tile) {
       return;
     }
@@ -398,6 +438,19 @@ export class NengiServer {
     return undefined;
   }
 
+  private buildCharacterStatsResponse(entityId: number): CharacterStatsResponse | null {
+    const allocations = this.simulation.stats.getAllocatedStats(entityId);
+    const derived = this.simulation.stats.getDerivedStats(entityId);
+    if (!allocations || !derived) {
+      return null;
+    }
+    return {
+      allocations: { ...allocations },
+      derived: { ...derived },
+      remainingPoints: 5 - totalAllocatedPoints(allocations),
+    };
+  }
+
   private validateHandshake(handshake: unknown): void {
     const acceptedTokens = this.options.acceptedTokens ?? ['dev'];
     const token = handshake && typeof handshake === 'object' ? (handshake as { token?: unknown }).token : null;
@@ -407,6 +460,3 @@ export class NengiServer {
   }
 }
 
-function tileMutationCoordKey(x: number, y: number): string {
-  return `${x}:${y}`;
-}

@@ -49,24 +49,39 @@ export class SpawnSystem {
     return ids;
   }
 
-  spawnProjectile(ownerEntityId: number, originX: number, originY: number, directionX: number, directionY: number): void {
-    const entityId = this.pooledProjectileEntityIds.pop() ?? this.composer.createFromRecipe(entityRecipeIds.basicProjectile, { x: originX, y: originY });
+  spawnProjectile(ownerEntityId: number, originX: number, originY: number, directionX: number, directionY: number, damageOverride?: number): void {
     const recipe = this.getProjectileRecipe(entityRecipeIds.basicProjectile);
     const direction = normalize({ x: directionX, y: directionY });
+    const damage = Number.isFinite(damageOverride) ? damageOverride! : recipe.damage;
 
-    const eid = this.world.eidByEntityId.get(entityId);
+    const entityId = this.pooledProjectileEntityIds.pop();
+    if (entityId !== undefined) {
+      const eid = this.world.eidByEntityId.get(entityId);
+      if (eid !== undefined) {
+        Position.x[eid] = originX;
+        Position.y[eid] = originY;
+        Velocity.x[eid] = direction.x * recipe.speed;
+        Velocity.y[eid] = direction.y * recipe.speed;
+        Projectile.ownerEntityId[eid] = ownerEntityId;
+        Projectile.damage[eid] = damage;
+        Projectile.lifetime[eid] = recipe.lifetimeSeconds;
+        this.composer.activateEntity(entityId);
+        return;
+      }
+      // Pooled entity id with no ECS backing — fall through to fresh creation.
+    }
+
+    const freshId = this.composer.createFromRecipe(entityRecipeIds.basicProjectile, { x: originX, y: originY });
+    const eid = this.world.eidByEntityId.get(freshId);
     if (eid === undefined) {
       return;
     }
 
-    Projectile.ownerEntityId[eid] = ownerEntityId;
-    Projectile.damage[eid] = recipe.damage;
-    Projectile.lifetime[eid] = recipe.lifetimeSeconds;
-    Position.x[eid] = originX;
-    Position.y[eid] = originY;
     Velocity.x[eid] = direction.x * recipe.speed;
     Velocity.y[eid] = direction.y * recipe.speed;
-    this.composer.activateEntity(entityId);
+    Projectile.ownerEntityId[eid] = ownerEntityId;
+    Projectile.damage[eid] = damage;
+    this.composer.activateEntity(freshId);
   }
 
   removeEntity(entityId: number): void {

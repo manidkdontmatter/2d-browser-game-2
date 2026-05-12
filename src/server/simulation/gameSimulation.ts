@@ -2,7 +2,7 @@
 import { FIXED_DELTA_SECONDS, PLAYER_MOVE_SPEED } from '../../shared/config.js';
 import { PlayerCommand } from '../../shared/domain/commands.js';
 import { entityRecipeIds } from '../../shared/entities/entityRecipes.js';
-import { EntitySnapshot, NetEntityKind, NetEntityRecord } from '../../shared/domain/snapshots.js';
+import { NetEntityKind, NetEntityRecord } from '../../shared/domain/snapshots.js';
 import type { TileMutation, WorldGenerationIdentity } from '../../shared/world/mapTypes.js';
 import { TileType } from '../../shared/world/mapTypes.js';
 import { CombatSystem } from '../systems/combatSystem.js';
@@ -15,6 +15,7 @@ import { TileMutationSystem } from '../systems/tileMutationSystem.js';
 import { AreaActivationSystem } from '../systems/areaActivationSystem.js';
 import { EffectSystem } from '../systems/effectSystem.js';
 import { SpatialQuerySystem } from '../systems/spatialQuerySystem.js';
+import { StatsSystem } from '../systems/statsSystem.js';
 import type { AiSchedulerMetrics } from '../systems/aiSchedulerSystem.js';
 import { createDefaultContentRegistry } from '../content/contentRegistry.js';
 import { EntityComposer } from './entityComposer.js';
@@ -39,6 +40,7 @@ export interface MapPortal {
 
 export class GameSimulation {
   readonly world: SimulationWorld;
+  readonly stats: StatsSystem;
   private readonly combat: CombatSystem;
   private readonly composer: EntityComposer;
   private readonly spawns: SpawnSystem;
@@ -68,6 +70,7 @@ export class GameSimulation {
     this.spatialQuery = new SpatialQuerySystem(this.world);
     this.areaActivation = new AreaActivationSystem(this.world);
     this.tileMutations = new TileMutationSystem(this.world);
+    this.stats = new StatsSystem(this.world);
     this.combat = new CombatSystem(this.world, this.effects);
     this.composer = new EntityComposer(this.world, this.content);
     this.minds = new MindSystem(this.world);
@@ -76,6 +79,8 @@ export class GameSimulation {
     this.ai = new AiSystem(this.world, this.combat, this.areaActivation, this.spatialQuery);
     this.physicsSystem = new PhysicsSystem(this.world);
     this.replication = new ReplicationSystem(this.world);
+    this.composer.setStatsSystem(this.stats);
+    this.combat.setStatsSystem(this.stats);
     this.combat.setSpawnSystem(this.spawns);
     this.combat.setTileMutationSystem(this.tileMutations);
     this.combat.setAreaActivationSystem(this.areaActivation);
@@ -191,6 +196,7 @@ export class GameSimulation {
     const simulationTimeMs = this.simulationTimeSeconds * 1000;
     this.spawns.updateRespawns(deltaSeconds);
     this.effects.update(simulationTimeMs);
+    this.stats.update(deltaSeconds);
     this.areaActivation.update();
     this.world.tileCollision.syncActiveChunkIndexes(this.areaActivation.getActiveChunkIndexes());
     this.input.applyHumanInput(simulationTimeMs);
@@ -202,7 +208,7 @@ export class GameSimulation {
     this.replication.syncNetworkRecords();
   }
 
-  getSnapshots(): EntitySnapshot[] {
+  getSnapshots(): NetEntityRecord[] {
     return this.replication.getSnapshots();
   }
 

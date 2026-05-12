@@ -181,7 +181,7 @@ describe('movement prediction controller', () => {
         clientTick: 8,
         clientTimeMs: 0,
       }],
-    }]);
+    }], 0);
 
     expect(state.getLocalEntity()?.x).toBeGreaterThan(100);
     expect(replays[0].tick).toBe(8);
@@ -207,7 +207,7 @@ describe('movement prediction controller', () => {
         clientTick: 2,
         clientTimeMs: 0,
       }],
-    }]);
+    }], 0);
 
     expect(state.getLocalEntity()?.x).toBe(100);
     expect(replays).toEqual([]);

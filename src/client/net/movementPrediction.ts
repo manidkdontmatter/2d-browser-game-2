@@ -111,6 +111,7 @@ export class MovementPredictionController {
   reconcileFromPredictionErrorFrame(
     frame: PredictionErrorFrameLike,
     unconfirmedCommandSets: NengiReplayCommandSet[],
+    nowMs: number,
   ): NengiPredictionReplay[] {
     if (!this.enabled) {
       return [];
@@ -183,7 +184,7 @@ export class MovementPredictionController {
 
     this.correctionOffsetX += previousPredictedX - local.x;
     this.correctionOffsetY += previousPredictedY - local.y;
-    this.lastCorrectionDecayAtMs = performance.now();
+    this.lastCorrectionDecayAtMs = nowMs;
     return replays;
   }
 

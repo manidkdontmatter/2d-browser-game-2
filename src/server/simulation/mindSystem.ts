@@ -12,6 +12,7 @@ export interface MindRecord {
 
 export class MindSystem {
   private readonly records = new Map<number, MindRecord>();
+  private readonly mindIdByEntityId = new Map<number, number>();
   private nextMindId = 1;
 
   constructor(private readonly world: SimulationWorld) {}
@@ -54,6 +55,7 @@ export class MindSystem {
     MindLink.mindId[eid] = mindId;
     MindLink.controllerKind[eid] = mind.controllerKind;
     mind.controlledEntityId = entityId;
+    this.mindIdByEntityId.set(entityId, mindId);
     return true;
   }
 
@@ -68,6 +70,7 @@ export class MindSystem {
       MindLink.mindId[eid] = 0;
       MindLink.controllerKind[eid] = 0;
       removeComponent(this.world.ecs, eid, MindLink);
+      this.mindIdByEntityId.delete(mind.controlledEntityId);
     }
 
     mind.controlledEntityId = null;
@@ -79,21 +82,14 @@ export class MindSystem {
   }
 
   removeMindForControlledEntity(entityId: number): void {
-    for (const mind of this.records.values()) {
-      if (mind.controlledEntityId === entityId) {
-        this.removeMind(mind.mindId);
-        return;
-      }
+    const mindId = this.mindIdByEntityId.get(entityId);
+    if (mindId !== undefined) {
+      this.removeMind(mindId);
     }
   }
 
   getMindIdForControlledEntity(entityId: number): number | null {
-    for (const mind of this.records.values()) {
-      if (mind.controlledEntityId === entityId) {
-        return mind.mindId;
-      }
-    }
-    return null;
+    return this.mindIdByEntityId.get(entityId) ?? null;
   }
 
   getControlledEntityId(mindId: number): number | null {

@@ -3,6 +3,7 @@ import { query } from 'bitecs';
 import { Active, ControlTarget, Health, MindLink, PhysicsBodyRef, Position } from '../simulation/components.js';
 import { isAlive, isControlledBy } from '../simulation/capabilities.js';
 import { SimulationWorld } from '../simulation/simulationWorld.js';
+import { AREA_ACTIVATION_RADIUS_CHUNKS, AREA_DEACTIVATION_GRACE_TICKS } from '../../shared/config.js';
 import { ControllerKind } from '../../shared/domain/commands.js';
 
 export interface AreaActivationOptions {
@@ -22,8 +23,8 @@ export class AreaActivationSystem {
     private readonly world: SimulationWorld,
     options: AreaActivationOptions = {},
   ) {
-    this.activationRadiusChunks = Math.max(0, options.activationRadiusChunks ?? 1);
-    this.deactivationGraceTicks = Math.max(0, options.deactivationGraceTicks ?? 90);
+    this.activationRadiusChunks = Math.max(0, options.activationRadiusChunks ?? AREA_ACTIVATION_RADIUS_CHUNKS);
+    this.deactivationGraceTicks = Math.max(0, options.deactivationGraceTicks ?? AREA_DEACTIVATION_GRACE_TICKS);
   }
 
   update(): void {

@@ -6,6 +6,11 @@ import { NET_TIMING } from '../../src/shared/net/timing.js';
 import { GameSimulation } from '../../src/server/simulation/gameSimulation.js';
 import { NengiServer } from '../../src/server/net/nengiServer.js';
 
+interface TestUser {
+  id: number;
+  queueMessage: (message: unknown) => void;
+}
+
 describe('nengi server command acceptance', () => {
   it('tracks latest accepted command sequence and ignores stale commands', () => {
     const simulation = new GameSimulation();
@@ -16,8 +21,8 @@ describe('nengi server command acceptance', () => {
     const serverInternals = server as unknown as {
       entityByUserId: Map<number, number>;
       mindByUserId: Map<number, number>;
-      userById: Map<number, typeof user>;
-      handleCommands(user: typeof user, commands: unknown[]): void;
+      userById: Map<number, TestUser>;
+      handleCommands(user: TestUser, commands: unknown[]): void;
     };
 
     serverInternals.entityByUserId.set(user.id, spawned.entityId);
@@ -48,8 +53,8 @@ describe('nengi server command acceptance', () => {
     const serverInternals = server as unknown as {
       entityByUserId: Map<number, number>;
       mindByUserId: Map<number, number>;
-      userById: Map<number, typeof user>;
-      handleCommands(user: typeof user, commands: unknown[]): void;
+      userById: Map<number, TestUser>;
+      handleCommands(user: TestUser, commands: unknown[]): void;
     };
 
     serverInternals.entityByUserId.set(user.id, spawned.entityId);
@@ -70,8 +75,8 @@ describe('nengi server command acceptance', () => {
     const serverInternals = server as unknown as {
       entityByUserId: Map<number, number>;
       mindByUserId: Map<number, number>;
-      userById: Map<number, typeof user>;
-      handleCommands(user: typeof user, commands: unknown[]): void;
+      userById: Map<number, TestUser>;
+      handleCommands(user: TestUser, commands: unknown[]): void;
     };
 
     serverInternals.entityByUserId.set(user.id, spawned.entityId);

@@ -1,16 +1,16 @@
 // Boots the browser client, renderer, input collection, coordinated UI state, nengi connection, and render loop.
 import './styles.css';
 import { GameRenderer } from './rendering/gameRenderer.js';
-import { ClientInputMode, InputCommandSampler, InputController } from './input.js';
+import { ClientInputMode, InputController } from './input.js';
 import { ClientConnection } from './net/clientConnection.js';
 import { ClientWorldState } from './game/clientWorldState.js';
 import { AttackIntent } from '../shared/domain/commands.js';
 import { ClientDiagnostics } from './diagnostics/clientDiagnostics.js';
 import { DiagnosticsPanel } from './diagnostics/diagnosticsPanel.js';
 import { NpcDebugPanel } from './diagnostics/npcDebugPanel.js';
+import { CommandStream } from './net/commandStream.js';
 import { MainUiOverlay } from './ui/mainUiOverlay.js';
 import { UiStateController } from './ui/uiStateController.js';
-import { CLIENT_COMMAND_PACKET_INTERVAL_MS, MOVEMENT_COMMAND_INTERVAL_MS, NET_TIMING } from '../shared/net/timing.js';
 
 declare global {
   interface Window {
@@ -19,7 +19,7 @@ declare global {
   }
 }
 
-const root = document.querySelector<HTMLElement>('#game-root');
+const root = document.querySelector<HTMLElement>('#game-root')!;
 if (!root) {
   throw new Error('Missing #game-root');
 }
@@ -35,14 +35,24 @@ async function boot(): Promise<void> {
   const uiState = new UiStateController({
     setInputMode: (mode) => input.setMode(mode),
   });
-  uiState.registerExclusiveSurface(new MainUiOverlay());
+  const mainUi = new MainUiOverlay();
+  uiState.registerExclusiveSurface(mainUi);
 
-  let inputSampler = new InputCommandSampler();
-  const connection = new ClientConnection(state, diagnostics, {
-    onMapTransferStarted: () => {
-      inputSampler = new InputCommandSampler();
-    },
-  });
+  const cursor = document.createElement('div');
+  cursor.className = 'game-cursor';
+  document.body.appendChild(cursor);
+
+  const connection = new ClientConnection(state, diagnostics);
+  mainUi.setConnection(connection);
+  const commandStream = new CommandStream(
+    connection,
+    diagnostics,
+    () => input.getMode(),
+    () => input.consumeAttack(),
+  );
+  connection.onMapTransferStarted = () => {
+    commandStream.reset();
+  };
   const diagnosticsPanel = new DiagnosticsPanel(diagnostics, {
     getClientSidePredictionEnabled: () => connection.isClientSidePredictionEnabled(),
     setClientSidePredictionEnabled: (enabled) => connection.setClientSidePredictionEnabled(enabled),
@@ -54,63 +64,29 @@ async function boot(): Promise<void> {
   window.addEventListener('keydown', (event) => uiState.handleGlobalKeyDown(event));
   void connection.connect(resolveInitialMapWebSocketUrl());
   let previousTickAtMs = performance.now();
-  let inputCommandAccumulatorMs = 0;
-  let outboundFlushAccumulatorMs = 0;
 
   function tick(): void {
     const nowMs = performance.now();
     const elapsedMs = Math.max(0, nowMs - previousTickAtMs);
     previousTickAtMs = nowMs;
-    outboundFlushAccumulatorMs = Math.min(
-      outboundFlushAccumulatorMs + elapsedMs,
-      CLIENT_COMMAND_PACKET_INTERVAL_MS,
-    );
-    diagnostics.recordFrame();
-    connection.pump();
+    diagnostics.recordFrame(nowMs);
+    connection.pump(nowMs);
 
     if (input.getMode() === ClientInputMode.Gameplay) {
-      inputCommandAccumulatorMs = Math.min(
-        inputCommandAccumulatorMs + elapsedMs,
-        MOVEMENT_COMMAND_INTERVAL_MS * NET_TIMING.maxClientInputCommandsPerFrame,
-      );
       const aim = renderer.screenToWorld(input.state.mouseX, input.state.mouseY);
-      const attack = input.state.attack;
-      if (attack === AttackIntent.Melee) {
-        renderer.showMeleeDiagnostic(aim.x, aim.y);
+      if (input.state.attack === AttackIntent.Melee) {
+        renderer.showMeleeDiagnostic(aim.x, aim.y, nowMs);
       }
-
-      let commandsCreatedThisFrame = 0;
-      let attackConsumedThisFrame = false;
-      while (
-        inputCommandAccumulatorMs >= MOVEMENT_COMMAND_INTERVAL_MS
-        && commandsCreatedThisFrame < NET_TIMING.maxClientInputCommandsPerFrame
-      ) {
-        const commandAttack = attackConsumedThisFrame ? AttackIntent.None : input.state.attack;
-        const command = inputSampler.sample(input.state, aim.x, aim.y, commandAttack, nowMs);
-        diagnostics.recordInputSample(nowMs);
-        if (inputSampler.shouldSend(command, nowMs) && connection.queueCommand(command)) {
-          inputSampler.markSent(command, nowMs);
-          if (commandAttack !== AttackIntent.None) {
-            input.consumeAttack();
-            attackConsumedThisFrame = true;
-          }
-        }
-
-        inputCommandAccumulatorMs -= MOVEMENT_COMMAND_INTERVAL_MS;
-        commandsCreatedThisFrame += 1;
-      }
+      commandStream.update(input.state, aim.x, aim.y, nowMs, elapsedMs);
     } else {
-      inputCommandAccumulatorMs = 0;
+      commandStream.update(input.state, 0, 0, nowMs, elapsedMs);
     }
 
-    if (outboundFlushAccumulatorMs >= CLIENT_COMMAND_PACKET_INTERVAL_MS) {
-      connection.flushOutbound();
-      outboundFlushAccumulatorMs = 0;
-    }
-
-    const localPresentation = connection.getLocalPresentationPosition(input.state, nowMs);
-    renderer.render(input.state.mouseX, input.state.mouseY, localPresentation);
-    diagnosticsPanel.update();
+    commandStream.flushIfNeeded();
+    const localPresentation = connection.getLocalPresentationPosition(nowMs);
+    renderer.render(localPresentation, nowMs);
+    cursor.style.transform = `translate(${input.state.mouseX}px, ${input.state.mouseY}px)`;
+    diagnosticsPanel.update(nowMs);
   }
 
   renderer.app.ticker.add(tick);

@@ -5,15 +5,6 @@ export enum NetEntityKind {
   Portal = 3,
 }
 
-export interface EntitySnapshot {
-  entityId: number;
-  kind: 'body' | 'projectile' | 'portal';
-  x: number;
-  y: number;
-  health: number;
-  facing: number;
-}
-
 export interface NetEntityRecord {
   nid: number;
   ntype: number;

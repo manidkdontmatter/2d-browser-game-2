@@ -1,6 +1,7 @@
 // Stores client-side replicated world state separately from networking and Pixi rendering.
 import { NetEntityKind } from '../../shared/domain/snapshots.js';
 import { parseWorldInitPayload, TileMutationPayload, WorldInitPayload } from '../../shared/net/messages.js';
+import { coordKey } from '../../shared/math/vector.js';
 import { generateMap } from '../../shared/world/generateMap.js';
 import { TileType, WorldGenerationIdentity } from '../../shared/world/mapTypes.js';
 import { TileMapView } from '../../shared/world/tileMap.js';
@@ -76,7 +77,7 @@ export class ClientWorldState {
   }
 
   getTileChunkRevision(chunkX: number, chunkY: number): string {
-    return `${this.mapRevision}:${this.tileChunkRevisions.get(tileChunkKey(chunkX, chunkY)) ?? 0}`;
+    return `${this.mapRevision}:${this.tileChunkRevisions.get(coordKey(chunkX, chunkY)) ?? 0}`;
   }
 
   consumePendingTileCollisionUpdates(): Array<{ x: number; y: number }> {
@@ -109,11 +110,7 @@ export class ClientWorldState {
   private markTileChunkDirty(tileX: number, tileY: number): void {
     const chunkX = Math.floor(tileX / CLIENT_TILE_CHUNK_SIZE);
     const chunkY = Math.floor(tileY / CLIENT_TILE_CHUNK_SIZE);
-    const key = tileChunkKey(chunkX, chunkY);
+    const key = coordKey(chunkX, chunkY);
     this.tileChunkRevisions.set(key, (this.tileChunkRevisions.get(key) ?? 0) + 1);
   }
-}
-
-function tileChunkKey(chunkX: number, chunkY: number): string {
-  return `${chunkX}:${chunkY}`;
 }

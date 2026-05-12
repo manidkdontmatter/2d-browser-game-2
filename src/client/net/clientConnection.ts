@@ -7,17 +7,14 @@ import type { MapTransferPayload } from '../../shared/net/messages.js';
 import { quantizeInputCommandForNetwork } from '../../shared/net/commandQuantization.js';
 import { NType } from '../../shared/net/nType.js';
 import { RequestEndpoint } from '../../shared/net/requestEndpoints.js';
+import type { AllocateStatRequest, CharacterStatsResponse, RemoveStatRequest } from '../../shared/net/statRequests.js';
 import { NET_TIMING } from '../../shared/net/timing.js';
 import { ClientDiagnostics } from '../diagnostics/clientDiagnostics.js';
 import { ClientEntity, ClientWorldState } from '../game/clientWorldState.js';
-import { InputCommandPayload, InputState } from '../input.js';
+import { InputCommandPayload } from '../input.js';
 import { MovementPredictionController, NengiReplayCommandSet, PredictionErrorFrameLike } from './movementPrediction.js';
 
 const PREDICTED_LOCAL_PROPS = ['x', 'y', 'facing'];
-
-export interface ClientConnectionOptions {
-  onMapTransferStarted?: (transfer: MapTransferPayload) => void;
-}
 
 export class ClientConnection {
   private client: Client;
@@ -31,11 +28,11 @@ export class ClientConnection {
   private hasPendingOutbound = false;
   private latestObservedServerFrameTick = 0;
   private latestRecordedConfirmedClientTick = -1;
+  onMapTransferStarted: ((payload: MapTransferPayload) => void) | null = null;
 
   constructor(
     private readonly state: ClientWorldState,
     private readonly diagnostics: ClientDiagnostics,
-    private readonly options: ClientConnectionOptions = {},
   ) {
     const client = createClient();
     this.client = client;
@@ -83,8 +80,57 @@ export class ClientConnection {
     });
   }
 
-  getLocalPresentationPosition(input: InputState, nowMs: number): { x: number; y: number } | null {
-    void input;
+  requestCharacterStats(callback: (response: CharacterStatsResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    this.client.network.request(RequestEndpoint.GetCharacterStats, null, (response: CharacterStatsResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  sendAllocateStat(statId: string, callback: (response: CharacterStatsResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    const body: AllocateStatRequest = { statId };
+    this.client.network.request(RequestEndpoint.AllocateStat, body, (response: CharacterStatsResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  sendRemoveStat(statId: string, callback: (response: CharacterStatsResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    const body: RemoveStatRequest = { statId };
+    this.client.network.request(RequestEndpoint.RemoveStat, body, (response: CharacterStatsResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  sendResetStats(callback: (response: CharacterStatsResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    this.client.network.request(RequestEndpoint.ResetStats, null, (response: CharacterStatsResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  getLocalPresentationPosition(nowMs: number): { x: number; y: number } | null {
     return this.movementPrediction.getPresentationPosition(nowMs);
   }
 
@@ -116,7 +162,7 @@ export class ClientConnection {
     this.hasPendingOutbound = false;
   }
 
-  pump(): void {
+  pump(nowMs: number): void {
     let messageCount = 0;
     while (this.client.network.messages.length > 0) {
       const message = this.client.network.messages.shift();
@@ -141,15 +187,15 @@ export class ClientConnection {
         return;
       }
     }
-    this.diagnostics.recordMessages(messageCount);
-    this.recordReceivedServerFrames();
-    this.processPredictionErrorFrames();
-    this.recordNengiConfirmation();
+    this.diagnostics.recordMessages(messageCount, nowMs);
+    this.recordReceivedServerFrames(nowMs);
+    this.processPredictionErrorFrames(nowMs);
+    this.recordNengiConfirmation(nowMs);
 
     for (const frame of this.interpolator.getInterpolatedState(NET_TIMING.interpolationDelayMs)) {
-      this.diagnostics.recordEntityCreates(frame.createEntities.length);
-      this.diagnostics.recordEntityUpdates(frame.updateEntities.length);
-      this.diagnostics.recordEntityDeletes(frame.deleteEntities.length);
+      this.diagnostics.recordEntityCreates(frame.createEntities.length, nowMs);
+      this.diagnostics.recordEntityUpdates(frame.updateEntities.length, nowMs);
+      this.diagnostics.recordEntityDeletes(frame.deleteEntities.length, nowMs);
       for (const entity of frame.createEntities) {
         this.state.upsertEntity(entity as ClientEntity);
         if ((entity as ClientEntity).entityId === this.state.localEntityId) {
@@ -176,7 +222,7 @@ export class ClientConnection {
     }
   }
 
-  private recordReceivedServerFrames(): void {
+  private recordReceivedServerFrames(nowMs: number): void {
     let receivedFrames = 0;
     for (const frame of this.client.network.frames) {
       if (frame.tick > this.latestObservedServerFrameTick) {
@@ -184,7 +230,7 @@ export class ClientConnection {
         receivedFrames += 1;
       }
     }
-    this.diagnostics.recordServerFrames(receivedFrames);
+    this.diagnostics.recordServerFrames(receivedFrames, nowMs);
   }
 
   private handleAuthoritativeReset(): void {
@@ -203,7 +249,7 @@ export class ClientConnection {
     this.connected = false;
     this.hasPendingOutbound = false;
     this.diagnostics.setConnected(false);
-    this.options.onMapTransferStarted?.(payload);
+    this.onMapTransferStarted?.(payload);
     this.closeCurrentSocket();
     this.state.resetForMapTransfer();
     this.resetNengiClient();
@@ -238,7 +284,7 @@ export class ClientConnection {
     );
   }
 
-  private recordNengiConfirmation(): void {
+  private recordNengiConfirmation(nowMs: number): void {
     const confirmedTick = this.client.network.outbound.confirmedTick;
     if (confirmedTick <= this.latestRecordedConfirmedClientTick) {
       return;
@@ -246,10 +292,10 @@ export class ClientConnection {
 
     this.latestRecordedConfirmedClientTick = confirmedTick;
     this.pruneReplayHistory(confirmedTick);
-    this.diagnostics.recordNengiConfirmation(confirmedTick, this.countReplayHistoryCommands());
+    this.diagnostics.recordNengiConfirmation(confirmedTick, this.countReplayHistoryCommands(), nowMs);
   }
 
-  private processPredictionErrorFrames(): void {
+  private processPredictionErrorFrames(nowMs: number): void {
     let predictionErrorFrames = 0;
     let replayedPredictionFrames = 0;
 
@@ -260,7 +306,7 @@ export class ClientConnection {
       }
 
       predictionErrorFrames += 1;
-      const replays = this.movementPrediction.reconcileFromPredictionErrorFrame(frame, this.getUnconfirmedMovementCommandSets(frame.tick));
+      const replays = this.movementPrediction.reconcileFromPredictionErrorFrame(frame, this.getUnconfirmedMovementCommandSets(frame.tick), nowMs);
       for (const replay of replays) {
         this.recordLocalPrediction(replay.tick, replay.entity);
         replayedPredictionFrames += 1;
@@ -268,7 +314,7 @@ export class ClientConnection {
     }
 
     if (predictionErrorFrames > 0 || replayedPredictionFrames > 0) {
-      this.diagnostics.recordPredictionReconciliation(predictionErrorFrames, replayedPredictionFrames);
+      this.diagnostics.recordPredictionReconciliation(predictionErrorFrames, replayedPredictionFrames, nowMs);
     }
   }
 

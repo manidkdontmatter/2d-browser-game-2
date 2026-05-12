@@ -1,4 +1,5 @@
 // Boots one authoritative map runtime with its own simulation, physics world, nengi instance, loop, and persistence.
+// When spawned by the server manager, config arrives via IPC; when run standalone, config is read from environment variables.
 import { DEFAULT_TICK_RATE } from '../shared/config.js';
 import { createWorldIdentity } from '../shared/world/generateMap.js';
 import type { WorldGenerationSettings } from '../shared/world/mapTypes.js';
@@ -22,73 +23,90 @@ interface MapRuntimeConfig {
   acceptedTokens: string[];
 }
 
-const config = readMapRuntimeConfig();
-const configuredIdentity = createWorldIdentity(config.seed, config.generation);
-const persistedWorld = PersistenceService.loadWorld(config.dbPath);
-const loadedMutations = persistedWorld && sameWorldIdentity(configuredIdentity, persistedWorld.identity) ? persistedWorld.mutations : [];
-const simulation = new GameSimulation(configuredIdentity, loadedMutations);
-simulation.spawnHostileNpcs(parseHostileNpcCount(process.env.NPC_COUNT));
-simulation.addPortalToTarget({
-  targetMapId: config.targetMapId,
-  targetMapName: config.targetMapName,
-  targetUrl: config.targetUrl,
-  token: config.transferToken,
-});
-
-const persistence = new PersistenceService(config.dbPath);
-persistence.startAutosave(simulation.identity, simulation.tileMap);
-
-const netServer = new NengiServer(simulation, { id: config.id, name: config.name }, {}, {
-  acceptedTokens: config.acceptedTokens,
-});
-netServer.listen(config.port);
-let latestTickLogAtMs = performance.now();
-
-const loop = new FixedStepLoop(
-  { tickRate: DEFAULT_TICK_RATE, maxCatchUpTicks: 5 },
-  (deltaSeconds) => {
-    netServer.receiveNetworkInput();
-    simulation.step(deltaSeconds);
-    netServer.sendSnapshots(deltaSeconds);
-  },
-  (sample) => {
-    const nowMs = performance.now();
-    if (nowMs - latestTickLogAtMs < 2000) {
-      return;
-    }
-
-    latestTickLogAtMs = nowMs;
-    const ai = simulation.getAiSchedulerMetrics();
-    console.log(
-      `[${config.id}] tick ms=${sample.wallIntervalMs.toFixed(3)}`
-      + ` steps=${sample.steps}`
-      + ` activeChunks=${simulation.getActiveChunkCount()}`
-      + ` denseBodies=${simulation.world.tileCollision.getBodyCount()}`
-      + ` aiSense=${ai.sensed}`
-      + ` aiPlan=${ai.planned}`
-      + ` aiSkipSense=${ai.budgetSkippedSense}`
-      + ` aiSkipPlan=${ai.budgetSkippedPlan}`,
-    );
-  },
-);
-
-loop.start();
-process.send?.({ type: 'mapRuntimeStarted', mapId: config.id, port: config.port });
-
-async function shutdown(): Promise<void> {
-  loop.stop();
-  await persistence.stop(simulation.identity, simulation.tileMap);
-  process.exit(0);
+interface MapRuntimeConfigMessage {
+  type: 'mapRuntimeConfig';
+  config: MapRuntimeConfig;
 }
 
-process.on('SIGINT', () => {
-  void shutdown();
-});
-process.on('SIGTERM', () => {
-  void shutdown();
-});
+if (process.send) {
+  process.on('message', (message: unknown) => {
+    if (isConfigMessage(message)) {
+      boot(message.config);
+    }
+  });
+  process.send({ type: 'mapRuntimeWaiting' });
+} else {
+  boot(readMapRuntimeConfigFromEnv());
+}
 
-function readMapRuntimeConfig(): MapRuntimeConfig {
+function boot(config: MapRuntimeConfig): void {
+  const configuredIdentity = createWorldIdentity(config.seed, config.generation);
+  const persistedWorld = PersistenceService.loadWorld(config.dbPath);
+  const loadedMutations = persistedWorld && sameWorldIdentity(configuredIdentity, persistedWorld.identity) ? persistedWorld.mutations : [];
+  const simulation = new GameSimulation(configuredIdentity, loadedMutations);
+  simulation.spawnHostileNpcs(parseHostileNpcCount(process.env.NPC_COUNT));
+  simulation.addPortalToTarget({
+    targetMapId: config.targetMapId,
+    targetMapName: config.targetMapName,
+    targetUrl: config.targetUrl,
+    token: config.transferToken,
+  });
+
+  const persistence = new PersistenceService(config.dbPath);
+  persistence.startAutosave(simulation.identity, simulation.tileMap);
+
+  const netServer = new NengiServer(simulation, { id: config.id, name: config.name }, {}, {
+    acceptedTokens: config.acceptedTokens,
+  });
+  netServer.listen(config.port);
+  let latestTickLogAtMs = performance.now();
+
+  const loop = new FixedStepLoop(
+    { tickRate: DEFAULT_TICK_RATE, maxCatchUpTicks: 5 },
+    (deltaSeconds) => {
+      netServer.receiveNetworkInput();
+      simulation.step(deltaSeconds);
+      netServer.sendSnapshots(deltaSeconds);
+    },
+    (sample) => {
+      const nowMs = performance.now();
+      if (nowMs - latestTickLogAtMs < 2000) {
+        return;
+      }
+
+      latestTickLogAtMs = nowMs;
+      const ai = simulation.getAiSchedulerMetrics();
+      console.log(
+        `[${config.id}] tick ms=${sample.wallIntervalMs.toFixed(3)}`
+        + ` steps=${sample.steps}`
+        + ` activeChunks=${simulation.getActiveChunkCount()}`
+        + ` denseBodies=${simulation.world.tileCollision.getBodyCount()}`
+        + ` aiSense=${ai.sensed}`
+        + ` aiPlan=${ai.planned}`
+        + ` aiSkipSense=${ai.budgetSkippedSense}`
+        + ` aiSkipPlan=${ai.budgetSkippedPlan}`,
+      );
+    },
+  );
+
+  loop.start();
+  process.send?.({ type: 'mapRuntimeStarted', mapId: config.id, port: config.port });
+
+  async function shutdown(): Promise<void> {
+    loop.stop();
+    await persistence.stop(simulation.identity, simulation.tileMap);
+    process.exit(0);
+  }
+
+  process.on('SIGINT', () => {
+    void shutdown();
+  });
+  process.on('SIGTERM', () => {
+    void shutdown();
+  });
+}
+
+function readMapRuntimeConfigFromEnv(): MapRuntimeConfig {
   const port = Number(process.env.MAP_PORT ?? process.env.PORT ?? 9001);
   const id = process.env.MAP_ID ?? 'test-map-a';
   const targetMapId = process.env.MAP_TARGET_ID ?? 'test-map-b';
@@ -105,6 +123,16 @@ function readMapRuntimeConfig(): MapRuntimeConfig {
     transferToken: process.env.MAP_TRANSFER_TOKEN ?? `${id}->${targetMapId}`,
     acceptedTokens: parseAcceptedTokens(process.env.MAP_ACCEPTED_TOKENS),
   };
+}
+
+function isConfigMessage(message: unknown): message is MapRuntimeConfigMessage {
+  return (
+    message !== null
+    && typeof message === 'object'
+    && (message as { type?: unknown }).type === 'mapRuntimeConfig'
+    && (message as { config?: unknown }).config !== null
+    && typeof (message as { config?: unknown }).config === 'object'
+  );
 }
 
 function parseAcceptedTokens(value: string | undefined): string[] {
@@ -129,6 +157,24 @@ function sameWorldIdentity(a: ReturnType<typeof createWorldIdentity>, b: ReturnT
   return (
     a.seed === b.seed
     && a.generatorVersion === b.generatorVersion
-    && JSON.stringify(a.settings) === JSON.stringify(b.settings)
+    && sameGenerationSettings(a.settings, b.settings)
+  );
+}
+
+function sameGenerationSettings(a: WorldGenerationSettings, b: WorldGenerationSettings): boolean {
+  return (
+    a.width === b.width
+    && a.height === b.height
+    && a.profile === b.profile
+    && a.waterPatchCount === b.waterPatchCount
+    && a.waterPatchRadiusMin === b.waterPatchRadiusMin
+    && a.waterPatchRadiusMax === b.waterPatchRadiusMax
+    && a.dirtPatchCount === b.dirtPatchCount
+    && a.dirtPatchRadiusMin === b.dirtPatchRadiusMin
+    && a.dirtPatchRadiusMax === b.dirtPatchRadiusMax
+    && a.rockClusterCount === b.rockClusterCount
+    && a.rockClusterRadiusMin === b.rockClusterRadiusMin
+    && a.rockClusterRadiusMax === b.rockClusterRadiusMax
+    && a.rockDensity === b.rockDensity
   );
 }

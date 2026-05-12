@@ -1,7 +1,8 @@
 // Maintains a deterministic grid index of authoritative entities for fast nearest-in-radius spatial queries.
 import { query } from 'bitecs';
-import { TILE_SIZE } from '../../shared/config.js';
+import { SPATIAL_CELL_SIZE_TILES, TILE_SIZE } from '../../shared/config.js';
 import { ControllerKind } from '../../shared/domain/commands.js';
+import { coordKey } from '../../shared/math/vector.js';
 import { Active, Health, Identity, MindLink, Position } from '../simulation/components.js';
 import { isAlive } from '../simulation/capabilities.js';
 import { SimulationWorld } from '../simulation/simulationWorld.js';
@@ -32,7 +33,7 @@ export class SpatialQuerySystem {
     candidatesVisited: 0,
     cellsVisited: 0,
   };
-  private readonly cellSizeWorld = TILE_SIZE * 4;
+  private readonly cellSizeWorld = TILE_SIZE * SPATIAL_CELL_SIZE_TILES;
 
   constructor(private readonly world: SimulationWorld) {}
 
@@ -48,7 +49,7 @@ export class SpatialQuerySystem {
       const entityId = Identity.entityId[eid];
       const x = Position.x[eid];
       const y = Position.y[eid];
-      const key = cellKey(cellCoord(x, this.cellSizeWorld), cellCoord(y, this.cellSizeWorld));
+      const key = coordKey(cellCoord(x, this.cellSizeWorld), cellCoord(y, this.cellSizeWorld));
       const bucket = this.humansByCellKey.get(key);
       if (bucket) {
         bucket.push({ entityId, x, y });
@@ -76,7 +77,7 @@ export class SpatialQuerySystem {
     for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
       for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
         this.stats.cellsVisited += 1;
-        const bucket = this.humansByCellKey.get(cellKey(cellX, cellY));
+        const bucket = this.humansByCellKey.get(coordKey(cellX, cellY));
         if (!bucket) {
           continue;
         }
@@ -113,8 +114,4 @@ export class SpatialQuerySystem {
 
 function cellCoord(value: number, cellSize: number): number {
   return Math.floor(value / cellSize);
-}
-
-function cellKey(cellX: number, cellY: number): string {
-  return `${cellX}:${cellY}`;
 }
