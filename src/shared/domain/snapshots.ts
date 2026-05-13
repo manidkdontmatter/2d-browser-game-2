@@ -3,6 +3,7 @@ export enum NetEntityKind {
   Body = 1,
   Projectile = 2,
   Portal = 3,
+  Pickup = 4,
 }
 
 export interface NetEntityRecord {

@@ -8,6 +8,7 @@ import { quantizeInputCommandForNetwork } from '../../shared/net/commandQuantiza
 import { NType } from '../../shared/net/nType.js';
 import { RequestEndpoint } from '../../shared/net/requestEndpoints.js';
 import type { AllocateStatRequest, CharacterStatsResponse, RemoveStatRequest } from '../../shared/net/statRequests.js';
+import type { DropItemRequestBody, HotbarOperationResponse, InventoryOperationResponse, MoveItemRequestBody, PickupItemRequestBody, SetHotbarSlotRequestBody } from '../../shared/net/inventoryRequests.js';
 import { NET_TIMING } from '../../shared/net/timing.js';
 import { ClientDiagnostics } from '../diagnostics/clientDiagnostics.js';
 import { ClientEntity, ClientWorldState } from '../game/clientWorldState.js';
@@ -125,6 +126,82 @@ export class ClientConnection {
     }
 
     this.client.network.request(RequestEndpoint.ResetStats, null, (response: CharacterStatsResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  requestInventory(callback: (response: InventoryOperationResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    this.client.network.request(RequestEndpoint.GetInventory, null, (response: InventoryOperationResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  sendPickupItem(pickupEntityId: number, callback: (response: InventoryOperationResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    const body: PickupItemRequestBody = { pickupEntityId };
+    this.client.network.request(RequestEndpoint.PickupItem, body, (response: InventoryOperationResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  sendDropItem(slotIndex: number, callback: (response: InventoryOperationResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    const body: DropItemRequestBody = { slotIndex };
+    this.client.network.request(RequestEndpoint.DropItem, body, (response: InventoryOperationResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  sendMoveItem(fromSlotIndex: number, toSlotIndex: number, callback: (response: InventoryOperationResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    const body: MoveItemRequestBody = { fromSlotIndex, toSlotIndex };
+    this.client.network.request(RequestEndpoint.MoveItem, body, (response: InventoryOperationResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  sendSetHotbarSlot(slotIndex: number, inventorySlotIndex: number | null, abilityId: string | null, callback: (response: HotbarOperationResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    const body: SetHotbarSlotRequestBody = { slotIndex, inventorySlotIndex, abilityId };
+    this.client.network.request(RequestEndpoint.SetHotbarSlot, body, (response: HotbarOperationResponse | null) => {
+      callback(response);
+    });
+    this.hasPendingOutbound = true;
+  }
+
+  requestHotbar(callback: (response: HotbarOperationResponse | null) => void): void {
+    if (!this.connected) {
+      callback(null);
+      return;
+    }
+
+    this.client.network.request(RequestEndpoint.GetHotbar, null, (response: HotbarOperationResponse | null) => {
       callback(response);
     });
     this.hasPendingOutbound = true;

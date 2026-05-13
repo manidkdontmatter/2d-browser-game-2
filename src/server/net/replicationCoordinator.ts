@@ -87,5 +87,8 @@ function normalizeKind(kind: number): NetEntityKind {
   if (kind === NetEntityKind.Portal) {
     return NetEntityKind.Portal;
   }
+  if (kind === NetEntityKind.Pickup) {
+    return NetEntityKind.Pickup;
+  }
   return NetEntityKind.Body;
 }

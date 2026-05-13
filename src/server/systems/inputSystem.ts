@@ -118,7 +118,9 @@ function toControlIntent(entityId: number, command: PlayerCommand, moveX: number
     aimX: command.aimX,
     aimY: command.aimY,
     attack: command.attack,
+    interact: command.interact,
     sequence: command.sequence,
     sourceController: ControllerKind.Human,
+    hotbarSlotActivated: command.hotbarSlotActivated,
   };
 }

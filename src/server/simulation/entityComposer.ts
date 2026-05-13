@@ -1,6 +1,6 @@
 // Owns authoritative translation from entity recipes into ECS, physics, indexes, and initial replication records.
 import { addComponent, addEntity, hasComponent, removeComponent, removeEntity } from 'bitecs';
-import { type BodyRecipe, type EntityRecipeId, type ProjectileRecipe } from '../../shared/entities/entityRecipes.js';
+import { type BodyRecipe, type EntityRecipeId, type PickupItemRecipe, type ProjectileRecipe } from '../../shared/entities/entityRecipes.js';
 import { ContentRegistry } from '../content/contentRegistry.js';
 import type { StatsSystem } from '../systems/statsSystem.js';
 import {
@@ -14,6 +14,7 @@ import {
   MindLink,
   NpcBrain,
   PhysicsBodyRef,
+  PickupItem,
   Position,
   Projectile,
   Stamina,
@@ -61,6 +62,10 @@ export class EntityComposer {
       this.addProjectileComposition(eid, recipe.projectile);
     }
 
+    if (recipe.pickup) {
+      this.addPickupComposition(eid, recipe.pickup);
+    }
+
     return entityId;
   }
 
@@ -87,6 +92,8 @@ export class EntityComposer {
     this.world.removePhysicsBody(entityId);
     this.world.eidByEntityId.delete(entityId);
     this.world.netEntities.delete(entityId);
+    this.world.pickupItemIds.delete(entityId);
+    this.world.npcPaths.delete(entityId);
     this.statsSystem?.removeStats(entityId);
   }
 
@@ -193,5 +200,10 @@ export class EntityComposer {
     Projectile.ownerEntityId[eid] = 0;
     Projectile.damage[eid] = recipe.damage;
     Projectile.lifetime[eid] = recipe.lifetimeSeconds;
+  }
+
+  private addPickupComposition(eid: number, _recipe: PickupItemRecipe): void {
+    addComponent(this.world.ecs, eid, PickupItem);
+    PickupItem.stackCount[eid] = 1;
   }
 }

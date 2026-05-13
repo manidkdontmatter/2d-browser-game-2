@@ -99,17 +99,18 @@ function validateEntityRecipe(recipe: EntityRecipe, errors: ContentValidationErr
       definitionId: recipe.id,
     });
   }
-  if (!recipe.body && !recipe.projectile) {
+  if (!recipe.body && !recipe.projectile && !recipe.pickup) {
     errors.push({
       code: 'invalid_recipe_shape',
-      message: `Entity recipe '${recipe.id}' must define either body or projectile data.`,
+      message: `Entity recipe '${recipe.id}' must define either body, projectile, or pickup data.`,
       definitionId: recipe.id,
     });
   }
-  if (recipe.body && recipe.projectile) {
+  const shapeCount = (recipe.body ? 1 : 0) + (recipe.projectile ? 1 : 0) + (recipe.pickup ? 1 : 0);
+  if (shapeCount > 1) {
     errors.push({
       code: 'invalid_recipe_shape',
-      message: `Entity recipe '${recipe.id}' cannot define both body and projectile data.`,
+      message: `Entity recipe '${recipe.id}' cannot define both body, projectile, and pickup data.`,
       definitionId: recipe.id,
     });
   }

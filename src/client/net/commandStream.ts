@@ -1,6 +1,6 @@
 // Accumulates input samples and flushes commands at the configured network rate instead of
-// inlining the rate-limit logic inside the render tick.
-import { AttackIntent } from '../../shared/domain/commands.js';
+// inlining the rate-limit logic inside the render loop.
+import { AttackIntent, NO_HOTBAR_SLOT } from '../../shared/domain/commands.js';
 import { CLIENT_COMMAND_PACKET_INTERVAL_MS, MOVEMENT_COMMAND_INTERVAL_MS, NET_TIMING } from '../../shared/net/timing.js';
 import { ClientDiagnostics } from '../diagnostics/clientDiagnostics.js';
 import { ClientInputMode, InputCommandSampler, InputState } from '../input.js';
@@ -15,7 +15,9 @@ export class CommandStream {
     private readonly connection: ClientConnection,
     private readonly diagnostics: ClientDiagnostics,
     private readonly getInputMode: () => ClientInputMode,
-    private readonly consumeAttack: () => void,
+    private readonly consumeAttack: () => AttackIntent,
+    private readonly consumeInteract: () => boolean,
+    private readonly consumeHotbarSlot: () => number,
   ) {}
 
   reset(): void {
@@ -42,13 +44,17 @@ export class CommandStream {
 
     let commandsCreatedThisFrame = 0;
     let attackConsumedThisFrame = false;
+    let interactConsumedThisFrame = false;
+    let hotbarConsumedThisFrame = false;
 
     while (
       this.inputAccumulatorMs >= MOVEMENT_COMMAND_INTERVAL_MS
       && commandsCreatedThisFrame < NET_TIMING.maxClientInputCommandsPerFrame
     ) {
       const commandAttack = attackConsumedThisFrame ? AttackIntent.None : inputState.attack;
-      const command = this.inputSampler.sample(inputState, aimX, aimY, commandAttack, nowMs);
+      const commandInteract = interactConsumedThisFrame ? false : this.consumeInteract();
+      const commandHotbarSlot = hotbarConsumedThisFrame ? NO_HOTBAR_SLOT : this.consumeHotbarSlot();
+      const command = this.inputSampler.sample(inputState, aimX, aimY, commandAttack, commandInteract, nowMs, commandHotbarSlot);
       this.diagnostics.recordInputSample(nowMs);
 
       if (this.inputSampler.shouldSend(command, nowMs) && this.connection.queueCommand(command)) {
@@ -56,6 +62,12 @@ export class CommandStream {
         if (commandAttack !== AttackIntent.None) {
           this.consumeAttack();
           attackConsumedThisFrame = true;
+        }
+        if (commandInteract) {
+          interactConsumedThisFrame = true;
+        }
+        if (commandHotbarSlot !== NO_HOTBAR_SLOT) {
+          hotbarConsumedThisFrame = true;
         }
       }
 

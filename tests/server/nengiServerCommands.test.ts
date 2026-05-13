@@ -32,7 +32,7 @@ describe('nengi server command acceptance', () => {
       command(1),
       command(1),
       command(3),
-      { ntype: NType.InputCommand, sequence: 4, clientTick: 1.5 },
+      { ntype: NType.InputCommand, sequence: 4, clientTick: 1.5, hotbarSlotActivated: -1 },
     ]);
 
     expect(server.getLatestAcceptedCommandSequenceForUser(user.id)).toBe(3);
@@ -102,5 +102,6 @@ function command(sequence: number): Record<string, unknown> {
     sequence,
     clientTick: sequence,
     clientTimeMs: sequence * 33,
+    hotbarSlotActivated: -1,
   };
 }

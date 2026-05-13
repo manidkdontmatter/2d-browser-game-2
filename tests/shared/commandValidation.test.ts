@@ -24,9 +24,11 @@ describe('input command validation', () => {
       aimX: 100,
       aimY: 200,
       attack: AttackIntent.Melee,
+      interact: false,
       sequence: 10,
       clientTick: 4,
       clientTimeMs: 150,
+      hotbarSlotActivated: -1,
     });
   });
 

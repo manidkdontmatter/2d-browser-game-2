@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { InputCommandPayload, InputCommandSampler, InputState } from '../../src/client/input.js';
 import { applyPredictedMovement, MovementPredictionController } from '../../src/client/net/movementPrediction.js';
-import { AttackIntent } from '../../src/shared/domain/commands.js';
+import { AttackIntent, NO_HOTBAR_SLOT } from '../../src/shared/domain/commands.js';
 import { NetEntityKind } from '../../src/shared/domain/snapshots.js';
 import { NType } from '../../src/shared/net/nType.js';
 import { NET_TIMING } from '../../src/shared/net/timing.js';
@@ -13,7 +13,7 @@ import { TileMapView } from '../../src/shared/world/tileMap.js';
 describe('input command sampler', () => {
   it('builds explicit command samples with movement axis and sequence metadata', () => {
     const sampler = new InputCommandSampler();
-    const command = sampler.sample(inputState({ w: true, d: true }), 500, 600, AttackIntent.None, 123);
+    const command = sampler.sample(inputState({ w: true, d: true }), 500, 600, AttackIntent.None, false, 123, NO_HOTBAR_SLOT);
 
     expect(command.sequence).toBe(1);
     expect(command.clientTick).toBe(0);
@@ -26,34 +26,34 @@ describe('input command sampler', () => {
 
   it('suppresses redundant no-op commands until the heartbeat window elapses', () => {
     const sampler = new InputCommandSampler();
-    const first = sampler.sample(inputState(), 10, 20, AttackIntent.None, 0);
+    const first = sampler.sample(inputState(), 10, 20, AttackIntent.None, false, 0, NO_HOTBAR_SLOT);
 
     expect(sampler.shouldSend(first, 0)).toBe(true);
     sampler.markSent(first, 0);
 
-    const redundant = sampler.sample(inputState(), 10, 20, AttackIntent.None, NET_TIMING.inputHeartbeatMs - 1);
+    const redundant = sampler.sample(inputState(), 10, 20, AttackIntent.None, false, NET_TIMING.inputHeartbeatMs - 1, NO_HOTBAR_SLOT);
     expect(sampler.shouldSend(redundant, NET_TIMING.inputHeartbeatMs - 1)).toBe(false);
 
-    const heartbeat = sampler.sample(inputState(), 10, 20, AttackIntent.None, NET_TIMING.inputHeartbeatMs);
+    const heartbeat = sampler.sample(inputState(), 10, 20, AttackIntent.None, false, NET_TIMING.inputHeartbeatMs, NO_HOTBAR_SLOT);
     expect(sampler.shouldSend(heartbeat, NET_TIMING.inputHeartbeatMs)).toBe(true);
     expect(heartbeat.sequence).toBe(2);
   });
 
   it('sends attack commands immediately even when movement and aim are unchanged', () => {
     const sampler = new InputCommandSampler();
-    const first = sampler.sample(inputState(), 10, 20, AttackIntent.None, 0);
+    const first = sampler.sample(inputState(), 10, 20, AttackIntent.None, false, 0, NO_HOTBAR_SLOT);
     sampler.markSent(first, 0);
 
-    const attack = sampler.sample(inputState(), 10, 20, AttackIntent.Projectile, 1);
+    const attack = sampler.sample(inputState(), 10, 20, AttackIntent.Projectile, false, 1, NO_HOTBAR_SLOT);
     expect(sampler.shouldSend(attack, 1)).toBe(true);
   });
 
   it('sends active movement samples at the input command cadence', () => {
     const sampler = new InputCommandSampler();
-    const first = sampler.sample(inputState({ d: true }), 10, 20, AttackIntent.None, 0);
+    const first = sampler.sample(inputState({ d: true }), 10, 20, AttackIntent.None, false, 0, NO_HOTBAR_SLOT);
     sampler.markSent(first, 0);
 
-    const held = sampler.sample(inputState({ d: true }), 10, 20, AttackIntent.None, 33);
+    const held = sampler.sample(inputState({ d: true }), 10, 20, AttackIntent.None, false, 33, NO_HOTBAR_SLOT);
 
     expect(sampler.shouldSend(held, 33)).toBe(true);
   });
@@ -70,9 +70,11 @@ describe('movement prediction controller', () => {
       aimX: 0,
       aimY: 0,
       attack: AttackIntent.None,
+      interact: false,
       sequence: 1,
       clientTick: 1,
       clientTimeMs: 0,
+      hotbarSlotActivated: NO_HOTBAR_SLOT,
     });
 
     expect(entity.x).toBeGreaterThan(100);
@@ -91,9 +93,11 @@ describe('movement prediction controller', () => {
       aimX: 0,
       aimY: 0,
       attack: AttackIntent.None,
+      interact: false,
       sequence: 1,
       clientTick: 1,
       clientTimeMs: 0,
+      hotbarSlotActivated: NO_HOTBAR_SLOT,
     }, state);
 
     expect(entity.x).toBeLessThan(105);
@@ -112,9 +116,11 @@ describe('movement prediction controller', () => {
       aimX: 0,
       aimY: 0,
       attack: AttackIntent.None,
+      interact: false,
       sequence: 1,
       clientTick: 1,
       clientTimeMs: 0,
+      hotbarSlotActivated: NO_HOTBAR_SLOT,
     }, state);
 
     expect(entity.x).toBeLessThan(112);
@@ -134,9 +140,11 @@ describe('movement prediction controller', () => {
       aimX: 0,
       aimY: 0,
       attack: AttackIntent.None,
+      interact: false,
       sequence: 1,
       clientTick: 1,
       clientTimeMs: 100,
+      hotbarSlotActivated: NO_HOTBAR_SLOT,
     };
 
     controller.applyLocalCommand(command);
@@ -177,9 +185,11 @@ describe('movement prediction controller', () => {
         aimX: 0,
         aimY: 0,
         attack: AttackIntent.None,
+        interact: false,
         sequence: 9,
         clientTick: 8,
         clientTimeMs: 0,
+      hotbarSlotActivated: NO_HOTBAR_SLOT,
       }],
     }], 0);
 
@@ -203,9 +213,11 @@ describe('movement prediction controller', () => {
         aimX: 0,
         aimY: 0,
         attack: AttackIntent.None,
+        interact: false,
         sequence: 1,
         clientTick: 2,
         clientTimeMs: 0,
+      hotbarSlotActivated: NO_HOTBAR_SLOT,
       }],
     }], 0);
 
@@ -239,9 +251,11 @@ describe('movement prediction controller', () => {
       aimX: 0,
       aimY: 0,
       attack: AttackIntent.None,
+      interact: false,
       sequence: 1,
       clientTick: 1,
       clientTimeMs: 0,
+      hotbarSlotActivated: NO_HOTBAR_SLOT,
     });
 
     expect(local.x).toBe(100);
@@ -255,9 +269,11 @@ function inputState(overrides: Partial<InputState> = {}): InputState {
     a: false,
     s: false,
     d: false,
+    e: false,
     mouseX: 0,
     mouseY: 0,
     attack: AttackIntent.None,
+    hotbarSlotActivated: NO_HOTBAR_SLOT,
     ...overrides,
   };
 }

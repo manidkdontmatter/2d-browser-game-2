@@ -12,6 +12,7 @@ ncontext.register(
     aimX: Binary.Float32,
     aimY: Binary.Float32,
     attack: Binary.UInt8,
+    interact: Binary.UInt8,
     sequence: Binary.UInt32,
     clientTick: Binary.UInt32,
     clientTimeMs: Binary.Float64,
@@ -66,5 +67,12 @@ ncontext.register(
     x: Binary.UInt16,
     y: Binary.UInt16,
     tile: Binary.UInt8,
+  }),
+);
+
+ncontext.register(
+  NType.InventoryStateMessage,
+  defineSchema({
+    dataJson: Binary.String,
   }),
 );

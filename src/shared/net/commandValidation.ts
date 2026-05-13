@@ -1,5 +1,5 @@
 // Validates and clamps untrusted client input commands before they reach authoritative simulation systems.
-import { AttackIntent, PlayerCommand } from '../domain/commands.js';
+import { AttackIntent, NO_HOTBAR_SLOT, PlayerCommand } from '../domain/commands.js';
 import { NType } from './nType.js';
 
 const MAX_AIM_COORDINATE = 1_000_000;
@@ -28,10 +28,19 @@ export function validateInputCommand(command: unknown): PlayerCommand | null {
     aimX: clampFinite(numberOrZero(input.aimX), -MAX_AIM_COORDINATE, MAX_AIM_COORDINATE),
     aimY: clampFinite(numberOrZero(input.aimY), -MAX_AIM_COORDINATE, MAX_AIM_COORDINATE),
     attack: clampAttack(numberOrZero(input.attack)),
+    interact: numberOrZero(input.interact) !== 0,
     sequence,
     clientTick,
     clientTimeMs: clampFinite(numberOrZero(input.clientTimeMs), 0, MAX_CLIENT_TIME_MS),
+    hotbarSlotActivated: clampHotbarSlot(input.hotbarSlotActivated),
   };
+}
+
+function clampHotbarSlot(value: unknown): number {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 11) {
+    return value;
+  }
+  return NO_HOTBAR_SLOT;
 }
 
 function normalizeAxis(x: number, y: number): { x: number; y: number } {

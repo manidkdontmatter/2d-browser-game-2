@@ -16,9 +16,11 @@ export interface PlayerCommand {
   aimX: number;
   aimY: number;
   attack: AttackIntent;
+  interact: boolean;
   sequence: number;
   clientTick: number;
   clientTimeMs: number;
+  hotbarSlotActivated: number;
 }
 
 export interface ControlIntent {
@@ -28,6 +30,10 @@ export interface ControlIntent {
   aimX: number;
   aimY: number;
   attack: AttackIntent;
+  interact: boolean;
   sequence: number;
   sourceController: ControllerKind;
+  hotbarSlotActivated: number;
 }
+
+export const NO_HOTBAR_SLOT = -1;

@@ -10,6 +10,8 @@ import { DiagnosticsPanel } from './diagnostics/diagnosticsPanel.js';
 import { NpcDebugPanel } from './diagnostics/npcDebugPanel.js';
 import { CommandStream } from './net/commandStream.js';
 import { AlertSystem } from './ui/alertSystem.js';
+import { Hotbar } from './ui/hotbar.js';
+import { InventoryStore } from './ui/inventoryStore.js';
 import { MainUiOverlay } from './ui/mainUiOverlay.js';
 import { UiStateController } from './ui/uiStateController.js';
 
@@ -39,17 +41,29 @@ async function boot(): Promise<void> {
   const mainUi = new MainUiOverlay();
   uiState.registerExclusiveSurface(mainUi);
 
+  const connection = new ClientConnection(state, diagnostics);
+
+  const inventoryStore = new InventoryStore();
+  const hotbar = new Hotbar(inventoryStore, (slotIndex, inventorySlotIndex, abilityId) => {
+    connection.sendSetHotbarSlot(slotIndex, inventorySlotIndex, abilityId, (response) => {
+      if (response?.success && response.hotbar) {
+        inventoryStore.applyHotbarPayload(response.hotbar);
+      }
+    });
+  });
+
   const cursor = document.createElement('div');
   cursor.className = 'game-cursor';
   document.body.appendChild(cursor);
 
-  const connection = new ClientConnection(state, diagnostics);
-  mainUi.setConnection(connection);
+  mainUi.setConnection(connection, inventoryStore);
   const commandStream = new CommandStream(
     connection,
     diagnostics,
     () => input.getMode(),
     () => input.consumeAttack(),
+    () => input.consumeInteract(),
+    () => input.consumeHotbarSlotActivated(),
   );
   connection.onMapTransferStarted = () => {
     commandStream.reset();

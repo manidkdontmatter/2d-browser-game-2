@@ -3,6 +3,8 @@ import { FIXED_DELTA_SECONDS, PLAYER_MOVE_SPEED } from '../../shared/config.js';
 import { PlayerCommand } from '../../shared/domain/commands.js';
 import { entityRecipeIds } from '../../shared/entities/entityRecipes.js';
 import { NetEntityKind, NetEntityRecord } from '../../shared/domain/snapshots.js';
+import { defaultItemIds } from '../../shared/items/itemDefinitions.js';
+import type { HotbarStatePayload, InventoryState } from '../../shared/items/inventoryTypes.js';
 import type { TileMutation, WorldGenerationIdentity } from '../../shared/world/mapTypes.js';
 import { TileType } from '../../shared/world/mapTypes.js';
 import { CombatSystem } from '../systems/combatSystem.js';
@@ -16,6 +18,7 @@ import { AreaActivationSystem } from '../systems/areaActivationSystem.js';
 import { EffectSystem } from '../systems/effectSystem.js';
 import { SpatialQuerySystem } from '../systems/spatialQuerySystem.js';
 import { StatsSystem } from '../systems/statsSystem.js';
+import { InventorySystem } from '../systems/inventorySystem.js';
 import type { AiSchedulerMetrics } from '../systems/aiSchedulerSystem.js';
 import { createDefaultContentRegistry } from '../content/contentRegistry.js';
 import { EntityComposer } from './entityComposer.js';
@@ -41,6 +44,7 @@ export interface MapPortal {
 export class GameSimulation {
   readonly world: SimulationWorld;
   readonly stats: StatsSystem;
+  readonly inventory: InventorySystem;
   private readonly combat: CombatSystem;
   private readonly composer: EntityComposer;
   private readonly spawns: SpawnSystem;
@@ -73,6 +77,7 @@ export class GameSimulation {
     this.stats = new StatsSystem(this.world);
     this.combat = new CombatSystem(this.world, this.effects);
     this.composer = new EntityComposer(this.world, this.content);
+    this.inventory = new InventorySystem(this.world, this.composer);
     this.minds = new MindSystem(this.world);
     this.spawns = new SpawnSystem(this.world, this.content, this.composer, this.minds, this.combat.attackLimiter);
     this.input = new InputSystem(this.world, this.combat);
@@ -110,7 +115,10 @@ export class GameSimulation {
   }
 
   spawnPlayer(): number {
-    return this.spawns.spawnPlayer();
+    const entityId = this.spawns.spawnPlayer();
+    this.inventory.ensureInventory(entityId);
+    this.inventory.ensureHotbar(entityId);
+    return entityId;
   }
 
   spawnPlayerMind(): PlayerMindSpawn {
@@ -184,11 +192,37 @@ export class GameSimulation {
   }
 
   removeEntity(entityId: number): void {
+    this.inventory.removeInventory(entityId);
     this.spawns.removeEntity(entityId);
   }
 
   hasEntityBody(entityId: number): boolean {
     return this.world.eidByEntityId.has(entityId) && this.world.bodyByEntityId.has(entityId);
+  }
+
+  spawnRandomGroundItems(count: number): void {
+    const itemIds = Object.values(defaultItemIds);
+    const map = this.world.tileMap;
+    let placed = 0;
+    let attempts = 0;
+    const maxAttempts = count * 20;
+
+    while (placed < count && attempts < maxAttempts) {
+      attempts += 1;
+      const tileX = 1 + Math.floor(Math.random() * (map.width - 2));
+      const tileY = 1 + Math.floor(Math.random() * (map.height - 2));
+
+      if (!map.isWalkable(tileX, tileY)) {
+        continue;
+      }
+
+      const worldPos = map.tileToWorldCenter(tileX, tileY);
+      const itemId = itemIds[Math.floor(Math.random() * itemIds.length)];
+      const stackCount = 1 + Math.floor(Math.random() * 5);
+
+      this.inventory.spawnGroundItem(itemId, stackCount, worldPos.x, worldPos.y);
+      placed += 1;
+    }
   }
 
   step(deltaSeconds = FIXED_DELTA_SECONDS): void {
@@ -269,6 +303,30 @@ export class GameSimulation {
 
   isEntityInvincible(entityId: number): boolean {
     return this.combat.isEntityInvincible(entityId);
+  }
+
+  getInventory(entityId: number): InventoryState | null {
+    return this.inventory.getInventory(entityId);
+  }
+
+  getHotbar(entityId: number): HotbarStatePayload | null {
+    return this.inventory.getHotbar(entityId);
+  }
+
+  setHotbarSlot(entityId: number, slotIndex: number, inventorySlotIndex: number | null, abilityId: string | null): boolean {
+    return this.inventory.setHotbarSlot(entityId, slotIndex, inventorySlotIndex, abilityId);
+  }
+
+  pickupItem(entityId: number, pickupEntityId: number): { success: boolean } {
+    return this.inventory.pickupItem(entityId, pickupEntityId);
+  }
+
+  dropItem(entityId: number, slotIndex: number): { success: boolean } {
+    return this.inventory.dropItem(entityId, slotIndex);
+  }
+
+  moveItem(entityId: number, fromSlotIndex: number, toSlotIndex: number): { success: boolean } {
+    return this.inventory.moveItem(entityId, fromSlotIndex, toSlotIndex);
   }
 
   getActiveChunkCount(): number {

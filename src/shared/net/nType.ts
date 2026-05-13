@@ -8,4 +8,5 @@ export enum NType {
   WorldInitMessage = 4,
   TileMutationMessage = 5,
   MapTransferMessage = 6,
+  InventoryStateMessage = 7,
 }

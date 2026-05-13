@@ -1,5 +1,6 @@
 // Renders the top-left DOM overlay for explicit NPC test spawning controls.
 import { DEBUG_NPC_SPAWN_DEFAULT_COUNT } from '../../shared/net/debugRequests.js';
+import { bindTooltip } from '../ui/tooltipSystem.js';
 
 export interface NpcDebugPanelOptions {
   spawnNpcs: (count: number) => Promise<{ spawned: number; requested: number }>;
@@ -28,7 +29,7 @@ export class NpcDebugPanel {
     this.countInput.min = '0';
     this.countInput.step = '1';
     this.countInput.value = String(DEBUG_NPC_SPAWN_DEFAULT_COUNT);
-    this.countInput.title = 'NPC count';
+    bindTooltip(this.countInput, 'NPC count');
 
     this.spawnButton = document.createElement('button');
     this.spawnButton.type = 'button';

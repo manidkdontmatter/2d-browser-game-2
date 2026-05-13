@@ -6,4 +6,10 @@ export const enum RequestEndpoint {
   AllocateStat = 4,
   RemoveStat = 5,
   ResetStats = 6,
+  PickupItem = 7,
+  DropItem = 8,
+  MoveItem = 9,
+  GetInventory = 10,
+  SetHotbarSlot = 11,
+  GetHotbar = 12,
 }

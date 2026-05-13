@@ -45,6 +45,7 @@ function boot(config: MapRuntimeConfig): void {
   const loadedMutations = persistedWorld && sameWorldIdentity(configuredIdentity, persistedWorld.identity) ? persistedWorld.mutations : [];
   const simulation = new GameSimulation(configuredIdentity, loadedMutations);
   simulation.spawnHostileNpcs(parseHostileNpcCount(process.env.NPC_COUNT));
+  simulation.spawnRandomGroundItems(200);
   simulation.addPortalToTarget({
     targetMapId: config.targetMapId,
     targetMapName: config.targetMapName,

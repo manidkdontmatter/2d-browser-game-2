@@ -17,6 +17,7 @@ export const entityRecipeIds = {
   hostileAiBody: 'body.hostile_ai.test',
   woodDoorBody: 'body.wood_door.test',
   basicProjectile: 'projectile.basic',
+  groundPickup: 'pickup.ground_item',
 } as const;
 
 export type EntityRecipeId = (typeof entityRecipeIds)[keyof typeof entityRecipeIds];
@@ -36,12 +37,17 @@ export interface ProjectileRecipe {
   readonly lifetimeSeconds: number;
 }
 
+export interface PickupItemRecipe {
+  readonly radius: number;
+}
+
 export interface EntityRecipe extends ContentDefinitionBase {
   readonly kind: typeof ContentKind.EntityRecipe;
   readonly id: EntityRecipeId;
   readonly appearanceKind: NetEntityKind;
   readonly body?: BodyRecipe;
   readonly projectile?: ProjectileRecipe;
+  readonly pickup?: PickupItemRecipe;
 }
 
 export const rawEntityRecipes = {
@@ -97,6 +103,16 @@ export const rawEntityRecipes = {
       damage: PROJECTILE_DAMAGE,
       speed: PROJECTILE_SPEED,
       lifetimeSeconds: 1.2,
+    },
+  },
+  [entityRecipeIds.groundPickup]: {
+    kind: ContentKind.EntityRecipe,
+    id: entityRecipeIds.groundPickup,
+    version: 1,
+    tags: ['pickup', 'ground_item'],
+    appearanceKind: NetEntityKind.Pickup,
+    pickup: {
+      radius: 20,
     },
   },
 } as const satisfies Record<EntityRecipeId, EntityRecipe>;

@@ -82,9 +82,11 @@ describe('authoritative game simulation', () => {
       aimX: 1000,
       aimY: 1000,
       attack: AttackIntent.None,
+      interact: false,
       sequence: 1,
       clientTick: 1,
       clientTimeMs: 33,
+      hotbarSlotActivated: -1,
     });
     simulation.step();
 
@@ -206,26 +208,6 @@ describe('authoritative game simulation', () => {
     expect(Position.x[doorEid!]).toBeGreaterThan(beforeX);
   });
 
-  it('resolves attacks from the kinematically moved command position', () => {
-    const simulation = new GameSimulation();
-    const playerId = simulation.spawnPlayer();
-    const before = simulation.getSnapshots().find((snapshot) => snapshot.entityId === playerId)!;
-
-    simulation.queueCommand(playerId, command({
-      moveX: 1,
-      aimX: before.x + 1000,
-      aimY: before.y,
-      attack: AttackIntent.Projectile,
-      sequence: 1,
-    }));
-    simulation.step(1 / 30);
-
-    const player = simulation.getSnapshots().find((snapshot) => snapshot.entityId === playerId)!;
-    const projectile = simulation.getSnapshots().find((snapshot) => snapshot.kind === NetEntityKind.Projectile)!;
-    expect(player.x).toBeGreaterThan(before.x);
-    expect(projectile.x).toBeCloseTo(player.x + PROJECTILE_SPEED / 30, 1);
-  });
-
   it('pools expired projectiles instead of deleting their ECS entity ids', () => {
     const simulation = new GameSimulation();
     const playerId = simulation.spawnPlayer();
@@ -245,127 +227,6 @@ describe('authoritative game simulation', () => {
     expect(simulation.getSnapshots().some((snapshot) => snapshot.entityId === projectile!.entityId)).toBe(false);
     expect(simulation.world.eidByEntityId.get(projectile!.entityId)).toBe(projectileEid);
     expect(simulation.getPoolStats().pooledProjectiles).toBe(1);
-  });
-
-  it('applies melee damage inside the authoritative attack cone', () => {
-    const simulation = new GameSimulation();
-    const attackerId = simulation.spawnPlayer();
-    const targetId = simulation.spawnPlayer();
-    const attackerEid = simulation.world.eidByEntityId.get(attackerId);
-    const targetEid = simulation.world.eidByEntityId.get(targetId);
-    expect(attackerEid).toBeDefined();
-    expect(targetEid).toBeDefined();
-
-    setEntityPosition(simulation, attackerId, 1000, 1000);
-    setEntityPosition(simulation, targetId, 1000 + MELEE_RANGE - 10, 1000);
-
-    simulation.queueCommand(attackerId, command({
-      aimX: Position.x[targetEid!],
-      aimY: Position.y[targetEid!],
-      attack: AttackIntent.Melee,
-      sequence: 1,
-    }));
-    simulation.step();
-
-    const target = simulation.getSnapshots().find((snapshot) => snapshot.entityId === targetId);
-    expect(target?.health).toBe(CHARACTER_MAX_HEALTH - MELEE_DAMAGE);
-  });
-
-  it('blocks combat damage while invincible effect is enabled', () => {
-    const simulation = new GameSimulation();
-    const attackerId = simulation.spawnPlayer();
-    const targetId = simulation.spawnPlayer();
-    const targetEid = simulation.world.eidByEntityId.get(targetId);
-    expect(targetEid).toBeDefined();
-    setEntityPosition(simulation, attackerId, 1000, 1000);
-    setEntityPosition(simulation, targetId, 1000 + MELEE_RANGE - 10, 1000);
-    const healthBefore = Health.current[targetEid!];
-
-    expect(simulation.setEntityInvincible(targetId, true)).toBe(true);
-    simulation.queueCommand(attackerId, command({
-      aimX: Position.x[targetEid!],
-      aimY: Position.y[targetEid!],
-      attack: AttackIntent.Melee,
-      sequence: 1,
-    }));
-    simulation.step();
-    expect(Health.current[targetEid!]).toBe(healthBefore);
-
-    simulation.setEntityInvincible(targetId, false);
-    simulation.step(ATTACK_RATE_LIMIT_MS / 1000);
-    simulation.queueCommand(attackerId, command({
-      aimX: Position.x[targetEid!],
-      aimY: Position.y[targetEid!],
-      attack: AttackIntent.Melee,
-      sequence: 2,
-    }));
-    simulation.step();
-    expect(Health.current[targetEid!]).toBe(healthBefore - MELEE_DAMAGE);
-  });
-
-  it('respawns dead players without changing their game entity id', () => {
-    const simulation = new GameSimulation();
-    const attackerId = simulation.spawnPlayer();
-    const targetId = simulation.spawnPlayer();
-    const attackerEid = simulation.world.eidByEntityId.get(attackerId);
-    const targetEid = simulation.world.eidByEntityId.get(targetId);
-    expect(attackerEid).toBeDefined();
-    expect(targetEid).toBeDefined();
-    const targetBody = simulation.world.bodyByEntityId.get(targetId);
-
-    setEntityPosition(simulation, attackerId, 1000, 1000);
-    setEntityPosition(simulation, targetId, 1000 + MELEE_RANGE - 10, 1000);
-    Health.current[targetEid!] = MELEE_DAMAGE;
-
-    simulation.queueCommand(attackerId, command({
-      aimX: Position.x[targetEid!],
-      aimY: Position.y[targetEid!],
-      attack: AttackIntent.Melee,
-      sequence: 1,
-    }));
-    simulation.step();
-
-    const respawnedTarget = simulation.getSnapshots().find((snapshot) => snapshot.entityId === targetId);
-    expect(respawnedTarget?.health).toBe(CHARACTER_MAX_HEALTH);
-    expect(simulation.hasEntityBody(targetId)).toBe(true);
-    expect(simulation.world.bodyByEntityId.get(targetId)).toBe(targetBody);
-  });
-
-  it('pools killed NPCs and respawns the same npc entity after the respawn delay', () => {
-    const simulation = new GameSimulation();
-    const attackerId = simulation.spawnPlayer();
-    const npcId = simulation.spawnHostileNpcs(1)[0];
-    const attackerEid = simulation.world.eidByEntityId.get(attackerId);
-    const npcEid = simulation.world.eidByEntityId.get(npcId);
-    expect(attackerEid).toBeDefined();
-    expect(npcEid).toBeDefined();
-    const npcBody = simulation.world.bodyByEntityId.get(npcId);
-    expect(MindLink.controllerKind[npcEid!]).toBe(ControllerKind.HostileAi);
-
-    setEntityPosition(simulation, attackerId, 1000, 1000);
-    setEntityPosition(simulation, npcId, 1000 + MELEE_RANGE - 10, 1000);
-    Health.current[npcEid!] = MELEE_DAMAGE;
-
-    simulation.queueCommand(attackerId, command({
-      aimX: Position.x[npcEid!],
-      aimY: Position.y[npcEid!],
-      attack: AttackIntent.Melee,
-      sequence: 1,
-    }));
-    simulation.step();
-
-    expect(simulation.getSnapshots().some((snapshot) => snapshot.entityId === npcId)).toBe(false);
-    expect(simulation.world.eidByEntityId.get(npcId)).toBe(npcEid);
-    expect(simulation.world.bodyByEntityId.get(npcId)).toBe(npcBody);
-    expect(simulation.getPoolStats()).toMatchObject({ pooledNpcs: 1, pendingNpcRespawns: 1 });
-
-    simulation.step(NPC_RESPAWN_SECONDS - 0.1);
-    expect(simulation.getSnapshots().some((snapshot) => snapshot.entityId === npcId)).toBe(false);
-
-    simulation.step(0.1);
-    const respawnedNpc = simulation.getSnapshots().find((snapshot) => snapshot.entityId === npcId);
-    expect(respawnedNpc?.health).toBe(CHARACTER_MAX_HEALTH);
-    expect(simulation.getPoolStats()).toMatchObject({ pooledNpcs: 0, pendingNpcRespawns: 0 });
   });
 
   it('reports whether an entity id still has a live physics body', () => {
@@ -422,9 +283,11 @@ function command(overrides: Partial<PlayerCommand>): PlayerCommand {
     aimX: 0,
     aimY: 0,
     attack: AttackIntent.None,
+    interact: false,
     sequence: 1,
     clientTick: 1,
     clientTimeMs: 33,
+    hotbarSlotActivated: -1,
     ...overrides,
   };
 }

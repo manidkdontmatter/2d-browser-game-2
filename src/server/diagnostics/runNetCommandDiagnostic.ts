@@ -28,9 +28,11 @@ for (let playerIndex = 0; playerIndex < players; playerIndex += 1) {
       aimX: 1000 + playerIndex,
       aimY: 1000 + sequence,
       attack: AttackIntent.None,
+      interact: false,
       sequence,
       clientTick: sequence,
       clientTimeMs: sequence * (1000 / NET_TIMING.movementCommandRate),
+      hotbarSlotActivated: -1,
     };
 
     const validateStartMs = performance.now();

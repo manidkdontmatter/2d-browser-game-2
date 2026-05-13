@@ -64,3 +64,7 @@ export const Stamina = {
   current: [] as number[],
   max: [] as number[],
 };
+
+export const PickupItem = {
+  stackCount: [] as number[],
+};

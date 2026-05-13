@@ -10,6 +10,7 @@ import { TileMapView } from '../../shared/world/tileMap.js';
 import { NType } from '../../shared/net/nType.js';
 import { GridPoint } from '../../shared/pathfinding/aStar.js';
 import type { AllocatedStats, DerivedStats } from '../../shared/stats/characterStats.js';
+import type { HotbarStatePayload, InventoryState } from '../../shared/items/inventoryTypes.js';
 import { SpawnPoint } from './types.js';
 import { Position } from './components.js';
 import { TileCollisionSystem } from '../systems/tileCollisionSystem.js';
@@ -35,6 +36,9 @@ export class SimulationWorld {
   readonly npcPaths = new Map<number, NpcPathCache>();
   readonly allocatedStats = new Map<number, AllocatedStats>();
   readonly derivedStats = new Map<number, DerivedStats>();
+  readonly inventories = new Map<number, InventoryState>();
+  readonly hotbars = new Map<number, HotbarStatePayload>();
+  readonly pickupItemIds = new Map<number, string>();
   readonly spawnCandidates: SpawnPoint[];
   private readonly spawnCandidateIndexByTileIndex = new Map<number, number>();
 

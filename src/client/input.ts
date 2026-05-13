@@ -1,5 +1,5 @@
 // Tracks DOM input state and samples it into explicit shared net command payloads.
-import { AttackIntent, PlayerCommand } from '../shared/domain/commands.js';
+import { AttackIntent, NO_HOTBAR_SLOT, PlayerCommand } from '../shared/domain/commands.js';
 import { NType } from '../shared/net/nType.js';
 import { NET_TIMING } from '../shared/net/timing.js';
 
@@ -13,14 +13,29 @@ export interface InputState {
   a: boolean;
   s: boolean;
   d: boolean;
+  e: boolean;
   mouseX: number;
   mouseY: number;
   attack: AttackIntent;
+  hotbarSlotActivated: number;
 }
 
 export interface InputCommandPayload extends PlayerCommand {
   ntype: NType.InputCommand;
 }
+
+const HOTBAR_KEY_CODES: Readonly<Record<string, number>> = {
+  Digit0: 2,
+  Digit1: 3,
+  Digit2: 4,
+  Digit3: 5,
+  Digit4: 6,
+  Digit5: 7,
+  Digit6: 8,
+  Digit7: 9,
+  Digit8: 10,
+  Digit9: 11,
+};
 
 export class InputController {
   readonly state: InputState = {
@@ -28,9 +43,11 @@ export class InputController {
     a: false,
     s: false,
     d: false,
+    e: false,
     mouseX: 0,
     mouseY: 0,
     attack: AttackIntent.None,
+    hotbarSlotActivated: NO_HOTBAR_SLOT,
   };
   private mode = ClientInputMode.Gameplay;
 
@@ -46,7 +63,13 @@ export class InputController {
       if (this.mode !== ClientInputMode.Gameplay) {
         return;
       }
-      this.state.attack = event.button === 2 ? AttackIntent.Projectile : AttackIntent.Melee;
+      if (event.button === 0) {
+        this.state.hotbarSlotActivated = 0;
+        this.state.attack = AttackIntent.Melee;
+      } else if (event.button === 2) {
+        this.state.hotbarSlotActivated = 1;
+        this.state.attack = AttackIntent.Projectile;
+      }
     });
   }
 
@@ -63,10 +86,22 @@ export class InputController {
     this.clearGameplayIntent();
   }
 
+  consumeInteract(): boolean {
+    const interact = this.state.e;
+    this.state.e = false;
+    return interact;
+  }
+
   consumeAttack(): AttackIntent {
     const attack = this.state.attack;
     this.state.attack = AttackIntent.None;
     return attack;
+  }
+
+  consumeHotbarSlotActivated(): number {
+    const slot = this.state.hotbarSlotActivated;
+    this.state.hotbarSlotActivated = NO_HOTBAR_SLOT;
+    return slot;
   }
 
   private onKey(code: string, pressed: boolean): void {
@@ -81,6 +116,14 @@ export class InputController {
     if (code === 'KeyA') this.state.a = pressed;
     if (code === 'KeyS') this.state.s = pressed;
     if (code === 'KeyD') this.state.d = pressed;
+    if (code === 'KeyE') this.state.e = pressed;
+
+    if (pressed) {
+      const hotbarSlot = HOTBAR_KEY_CODES[code];
+      if (hotbarSlot !== undefined) {
+        this.state.hotbarSlotActivated = hotbarSlot;
+      }
+    }
   }
 
   private clearGameplayIntent(): void {
@@ -88,7 +131,9 @@ export class InputController {
     this.state.a = false;
     this.state.s = false;
     this.state.d = false;
+    this.state.e = false;
     this.state.attack = AttackIntent.None;
+    this.state.hotbarSlotActivated = NO_HOTBAR_SLOT;
   }
 }
 
@@ -97,7 +142,7 @@ export class InputCommandSampler {
   private lastSent: InputCommandPayload | null = null;
   private lastSentAtMs = Number.NEGATIVE_INFINITY;
 
-  sample(state: InputState, aimWorldX: number, aimWorldY: number, attack: AttackIntent, nowMs: number): InputCommandPayload {
+  sample(state: InputState, aimWorldX: number, aimWorldY: number, attack: AttackIntent, interact: boolean, nowMs: number, hotbarSlotActivated: number): InputCommandPayload {
     const axis = movementAxis(state);
     const command: InputCommandPayload = {
       ntype: NType.InputCommand,
@@ -106,15 +151,17 @@ export class InputCommandSampler {
       aimX: aimWorldX,
       aimY: aimWorldY,
       attack,
+      interact,
       sequence: this.nextSequence,
       clientTick: 0,
       clientTimeMs: nowMs,
+      hotbarSlotActivated,
     };
     return command;
   }
 
   shouldSend(command: InputCommandPayload, nowMs: number): boolean {
-    if (command.attack !== AttackIntent.None) {
+    if (command.attack !== AttackIntent.None || command.interact) {
       return true;
     }
 
@@ -164,6 +211,7 @@ function commandsAreRedundant(previous: InputCommandPayload, next: InputCommandP
     previous.moveX === next.moveX &&
     previous.moveY === next.moveY &&
     (!aimIsRelevant || (previous.aimX === next.aimX && previous.aimY === next.aimY)) &&
-    previous.attack === next.attack
+    previous.attack === next.attack &&
+    previous.interact === next.interact
   );
 }

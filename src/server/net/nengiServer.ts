@@ -6,11 +6,14 @@ import { coordKey } from '../../shared/math/vector.js';
 import type { MapTransferPayload } from '../../shared/net/messages.js';
 import { tileMutationToPayload, worldIdentityToInitPayload } from '../../shared/net/messages.js';
 import { ncontext } from '../../shared/net/context.js';
+import { NetEntityKind } from '../../shared/domain/snapshots.js';
 import { NType } from '../../shared/net/nType.js';
 import { validateInputCommand } from '../../shared/net/commandValidation.js';
 import { parseDebugInvincibleEnabled, parseDebugNpcSpawnCount } from '../../shared/net/debugRequests.js';
 import { RequestEndpoint } from '../../shared/net/requestEndpoints.js';
 import type { AllocateStatRequest, CharacterStatsResponse, RemoveStatRequest } from '../../shared/net/statRequests.js';
+import type { DropItemRequestBody, HotbarOperationResponse, InventoryOperationResponse, MoveItemRequestBody, PickupItemRequestBody, SetHotbarSlotRequestBody } from '../../shared/net/inventoryRequests.js';
+import { inventoryToPayload } from '../../shared/items/inventoryTypes.js';
 import { totalAllocatedPoints } from '../../shared/stats/characterStats.js';
 import { NET_TIMING, SNAPSHOT_INTERVAL_SECONDS } from '../../shared/net/timing.js';
 import type { TileMutation } from '../../shared/world/mapTypes.js';
@@ -125,6 +128,85 @@ export class NengiServer {
       }
       this.simulation.stats.resetAllocations(entityId);
       send(this.buildCharacterStatsResponse(entityId));
+    });
+    this.instance.respond(RequestEndpoint.PickupItem, ({ user, body }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send({ success: false, inventory: null } satisfies InventoryOperationResponse);
+        return;
+      }
+      const request = body as PickupItemRequestBody;
+      const result = this.simulation.pickupItem(entityId, request.pickupEntityId);
+      const inventory = this.simulation.getInventory(entityId);
+      send({
+        success: result.success,
+        inventory: inventory ? inventoryToPayload(inventory) : null,
+      } satisfies InventoryOperationResponse);
+    });
+    this.instance.respond(RequestEndpoint.DropItem, ({ user, body }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send({ success: false, inventory: null } satisfies InventoryOperationResponse);
+        return;
+      }
+      const request = body as DropItemRequestBody;
+      const result = this.simulation.dropItem(entityId, request.slotIndex);
+      const inventory = this.simulation.getInventory(entityId);
+      send({
+        success: result.success,
+        inventory: inventory ? inventoryToPayload(inventory) : null,
+      } satisfies InventoryOperationResponse);
+    });
+    this.instance.respond(RequestEndpoint.MoveItem, ({ user, body }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send({ success: false, inventory: null } satisfies InventoryOperationResponse);
+        return;
+      }
+      const request = body as MoveItemRequestBody;
+      const result = this.simulation.moveItem(entityId, request.fromSlotIndex, request.toSlotIndex);
+      const inventory = this.simulation.getInventory(entityId);
+      send({
+        success: result.success,
+        inventory: inventory ? inventoryToPayload(inventory) : null,
+      } satisfies InventoryOperationResponse);
+    });
+    this.instance.respond(RequestEndpoint.GetInventory, ({ user }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send({ success: false, inventory: null } satisfies InventoryOperationResponse);
+        return;
+      }
+      const inventory = this.simulation.getInventory(entityId);
+      send({
+        success: inventory !== null,
+        inventory: inventory ? inventoryToPayload(inventory) : null,
+      } satisfies InventoryOperationResponse);
+    });
+    this.instance.respond(RequestEndpoint.SetHotbarSlot, ({ user, body }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send({ success: false, hotbar: null } satisfies HotbarOperationResponse);
+        return;
+      }
+      const request = body as SetHotbarSlotRequestBody;
+      const ok = this.simulation.setHotbarSlot(entityId, request.slotIndex, request.inventorySlotIndex, request.abilityId);
+      send({
+        success: ok,
+        hotbar: ok ? this.simulation.getHotbar(entityId) : null,
+      } satisfies HotbarOperationResponse);
+    });
+    this.instance.respond(RequestEndpoint.GetHotbar, ({ user }, send) => {
+      const entityId = this.getControlledEntityForUser(user.id);
+      if (entityId === undefined) {
+        send({ success: false, hotbar: null } satisfies HotbarOperationResponse);
+        return;
+      }
+      const hotbar = this.simulation.getHotbar(entityId);
+      send({
+        success: hotbar !== null,
+        hotbar,
+      } satisfies HotbarOperationResponse);
     });
   }
 
@@ -255,6 +337,9 @@ export class NengiServer {
 
       this.latestAcceptedSequenceByUserId.set(user.id, parsed.sequence);
       this.simulation.queueCommandForMind(mindId, parsed);
+      if (parsed.interact) {
+        this.handleInteractCommand(mindId);
+      }
       acceptedCommandCount += 1;
     }
   }
@@ -436,6 +521,38 @@ export class NengiServer {
     }
 
     return undefined;
+  }
+
+  private handleInteractCommand(mindId: number): void {
+    const entityId = this.simulation.getControlledEntityId(mindId);
+    if (entityId === null) {
+      return;
+    }
+
+    const records = this.simulation.getNetworkRecords();
+    const playerPos = this.simulation.world.getEntityPosition(entityId);
+    if (!playerPos) {
+      return;
+    }
+
+    let nearestEntityId: number | null = null;
+    let nearestDistance = Infinity;
+    const PICKUP_INTERACT_RANGE = 96;
+
+    for (const record of records) {
+      if (record.kind !== NetEntityKind.Pickup) {
+        continue;
+      }
+      const distance = Math.hypot(playerPos.x - record.x, playerPos.y - record.y);
+      if (distance < nearestDistance && distance <= PICKUP_INTERACT_RANGE) {
+        nearestDistance = distance;
+        nearestEntityId = record.entityId;
+      }
+    }
+
+    if (nearestEntityId !== null) {
+      this.simulation.pickupItem(entityId, nearestEntityId);
+    }
   }
 
   private buildCharacterStatsResponse(entityId: number): CharacterStatsResponse | null {

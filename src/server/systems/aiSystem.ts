@@ -14,7 +14,7 @@ import {
   NPC_PATH_POINT_REACHED_EPSILON,
   TILE_SIZE,
 } from '../../shared/config.js';
-import { AttackIntent, ControlIntent, ControllerKind } from '../../shared/domain/commands.js';
+import { AttackIntent, ControlIntent, ControllerKind, NO_HOTBAR_SLOT } from '../../shared/domain/commands.js';
 import { distance, normalize, tileCenter } from '../../shared/math/vector.js';
 import { findPath, GridPoint } from '../../shared/pathfinding/aStar.js';
 import { Active, ControlTarget, Health, Identity, Locomotion, MindLink, NpcBrain, PhysicsBodyRef, Position, Velocity } from '../simulation/components.js';
@@ -283,7 +283,9 @@ function createAiIntent(
     aimX: target.x,
     aimY: target.y,
     attack,
+    interact: false,
     sequence: 0,
     sourceController: ControllerKind.HostileAi,
+    hotbarSlotActivated: NO_HOTBAR_SLOT,
   };
 }

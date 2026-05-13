@@ -24,8 +24,12 @@ import {
   MAX_ALLOCATION_POINTS,
 } from '../../shared/stats/characterStats.js';
 import type { ClientConnection } from '../net/clientConnection.js';
+import type { InventorySlot } from '../../shared/items/inventoryTypes.js';
+import type { ItemDefinition } from '../../shared/items/itemDefinitions.js';
 import { AbilityAuthoringStore } from './abilityAuthoringStore.js';
+import type { InventoryStore } from './inventoryStore.js';
 import { ExclusiveUiScreen } from './uiStateController.js';
+import { bindTooltip, tooltipSystem } from './tooltipSystem.js';
 
 type MainUiSectionKey = 'character' | 'inventory' | 'abilities' | 'ability-creator' | 'settings';
 
@@ -65,11 +69,13 @@ export class MainUiOverlay {
   private readonly sectionTitle = document.createElement('h1');
   private readonly content = document.createElement('section');
   private connection: ClientConnection | null = null;
+  private inventoryStore: InventoryStore | null = null;
   private characterStats: CharacterStatsResponse | null = null;
   private statsRequestInFlight = false;
   private activeSectionKey: MainUiSectionKey = 'character';
   private open = false;
   private previousFocus: HTMLElement | null = null;
+  private inventorySelectedSlotIndex: number | null = null;
 
   constructor() {
     this.element = document.createElement('div');
@@ -94,8 +100,11 @@ export class MainUiOverlay {
     this.activateSection(this.activeSectionKey);
   }
 
-  setConnection(connection: ClientConnection): void {
+  setConnection(connection: ClientConnection, inventoryStore?: InventoryStore): void {
     this.connection = connection;
+    if (inventoryStore) {
+      this.inventoryStore = inventoryStore;
+    }
   }
 
   setOpen(open: boolean): void {
@@ -106,6 +115,8 @@ export class MainUiOverlay {
     if (open) {
       this.previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       this.requestCharacterStats();
+      this.requestInventory();
+      this.requestHotbar();
     }
 
     this.open = open;
@@ -204,6 +215,10 @@ export class MainUiOverlay {
   private renderActiveSection(): void {
     if (this.activeSectionKey === 'character') {
       this.content.replaceChildren(this.createCharacterPanel());
+      return;
+    }
+    if (this.activeSectionKey === 'inventory') {
+      this.content.replaceChildren(this.createInventoryPanel());
       return;
     }
     if (this.activeSectionKey === 'abilities') {
@@ -331,7 +346,7 @@ export class MainUiOverlay {
       const label = document.createElement('div');
       label.className = 'ability-stat-label';
       label.textContent = stat.label;
-      label.title = stat.description;
+      bindTooltip(label, stat.description);
 
       const controls = document.createElement('div');
       controls.className = 'ability-stepper';
@@ -376,7 +391,7 @@ export class MainUiOverlay {
 
       const term = document.createElement('dt');
       term.textContent = effect.label;
-      term.title = `Derived from ${effect.sourceStat}`;
+      bindTooltip(term, `Derived from ${effect.sourceStat}`);
 
       const desc = document.createElement('dd');
       if (delta === 0) {
@@ -465,11 +480,29 @@ export class MainUiOverlay {
     });
     actions.append(editButton, deleteButton);
 
-    const tooltip = document.createElement('div');
-    tooltip.className = 'ability-card-tooltip';
-    tooltip.appendChild(this.createAbilitySummary(ability, 'tooltip'));
+    card.append(header, details, description, actions);
 
-    card.append(header, details, description, actions, tooltip);
+    card.draggable = true;
+    card.addEventListener('dragstart', (event) => {
+      event.dataTransfer!.setData('application/x-hotbar-source', 'ability');
+      event.dataTransfer!.setData('application/x-ability-id', ability.id);
+      event.dataTransfer!.effectAllowed = 'move';
+      card.classList.add('ability-card-dragging');
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('ability-card-dragging');
+    });
+
+    card.addEventListener('mouseenter', (e) => {
+      tooltipSystem.showRich(card, () => this.createAbilitySummary(ability), e.clientX, e.clientY);
+    });
+    card.addEventListener('mousemove', (e) => {
+      tooltipSystem.reposition(e.clientX, e.clientY);
+    });
+    card.addEventListener('mouseleave', () => {
+      tooltipSystem.hide(card);
+    });
+
     return card;
   }
 
@@ -616,7 +649,7 @@ export class MainUiOverlay {
       const label = document.createElement('div');
       label.className = 'ability-stat-label';
       label.textContent = stat.label;
-      label.title = stat.description;
+      bindTooltip(label, stat.description);
 
       const controls = document.createElement('div');
       controls.className = 'ability-stepper';
@@ -687,7 +720,7 @@ export class MainUiOverlay {
       button.dataset.selected = selected ? 'true' : 'false';
       button.dataset.polarity = attribute.polarity;
       button.disabled = projectedRemainingBudget < 0;
-      button.title = attribute.description;
+      bindTooltip(button, attribute.description);
       button.addEventListener('click', () => {
         this.abilityStore.toggleDraftAttribute(attribute.id);
         this.renderActiveSection();
@@ -710,7 +743,7 @@ export class MainUiOverlay {
     const pane = this.createCreatorPane('Ability Results');
     pane.classList.add('ability-results-pane');
     const summary = summarizeAuthoredAbility(ability);
-    pane.appendChild(this.createAbilitySummary(ability, 'panel'));
+    pane.appendChild(this.createAbilitySummary(ability));
 
     const validation = document.createElement('div');
     validation.className = 'ability-validation';
@@ -722,9 +755,9 @@ export class MainUiOverlay {
     return pane;
   }
 
-  private createAbilitySummary(ability: AuthoredAbilityDefinition, variant: 'panel' | 'tooltip'): HTMLElement {
+  private createAbilitySummary(ability: AuthoredAbilityDefinition): HTMLElement {
     const summary = document.createElement('div');
-    summary.className = `ability-summary ability-summary-${variant}`;
+    summary.className = 'ability-summary';
 
     const details = document.createElement('dl');
     details.className = 'ability-results-details';
@@ -782,7 +815,7 @@ export class MainUiOverlay {
           chip.dataset.polarity = definition.polarity;
         }
         chip.textContent = definition.label;
-        chip.title = definition.description;
+        bindTooltip(chip, definition.description);
         body.appendChild(chip);
         if (index < chips.length - 1) {
           body.appendChild(document.createTextNode(' '));
@@ -819,7 +852,7 @@ export class MainUiOverlay {
     button.className = 'ability-icon-button';
     button.textContent = text;
     button.setAttribute('aria-label', label);
-    button.title = label;
+    bindTooltip(button, label);
     return button;
   }
 
@@ -829,6 +862,192 @@ export class MainUiOverlay {
     button.className = 'ability-action-button';
     button.textContent = label;
     return button;
+  }
+
+  private requestInventory(): void {
+    if (!this.connection || !this.inventoryStore) {
+      return;
+    }
+
+    this.connection.requestInventory((response) => {
+      if (response && response.success && response.inventory) {
+        this.inventoryStore?.applyInventoryPayload(response.inventory);
+        if (this.activeSectionKey === 'inventory') {
+          this.renderActiveSection();
+        }
+      }
+    });
+  }
+
+  private requestHotbar(): void {
+    if (!this.connection || !this.inventoryStore) {
+      return;
+    }
+
+    this.connection.requestHotbar((response) => {
+      if (response && response.success && response.hotbar) {
+        this.inventoryStore?.applyHotbarPayload(response.hotbar);
+      }
+    });
+  }
+
+  private createInventoryPanel(): HTMLElement {
+    const inventory = this.inventoryStore?.getInventory();
+    if (!inventory || inventory.maxSlots <= 0) {
+      const placeholder = this.createPlaceholder();
+      placeholder.textContent = 'Inventory unavailable';
+      return placeholder;
+    }
+
+    const panel = document.createElement('div');
+    panel.className = 'character-panel';
+
+    const grid = document.createElement('div');
+    grid.className = 'inventory-grid';
+
+    for (let i = 0; i < inventory.maxSlots; i += 1) {
+      const slot = inventory.slots.get(i);
+      grid.appendChild(this.createInventorySlot(i, slot));
+    }
+
+    panel.appendChild(grid);
+
+    const actions = document.createElement('div');
+    actions.className = 'inventory-actions';
+
+    const dropBtn = this.createActionButton('Drop Selected');
+    dropBtn.disabled = this.inventorySelectedSlotIndex === null || !inventory.slots.has(this.inventorySelectedSlotIndex ?? -1);
+    dropBtn.addEventListener('click', () => {
+      if (this.inventorySelectedSlotIndex !== null && this.connection) {
+        this.connection.sendDropItem(this.inventorySelectedSlotIndex, (response) => {
+          if (response && response.success && response.inventory) {
+            this.inventoryStore?.applyInventoryPayload(response.inventory);
+            if (this.inventorySelectedSlotIndex !== null && !this.inventoryStore?.getInventory().slots.has(this.inventorySelectedSlotIndex)) {
+              this.inventorySelectedSlotIndex = null;
+            }
+            this.renderActiveSection();
+          }
+        });
+      }
+    });
+
+    actions.append(dropBtn);
+    panel.appendChild(actions);
+
+    return panel;
+  }
+
+  private createInventorySlot(index: number, slot: InventorySlot | undefined): HTMLElement {
+    const el = document.createElement('div');
+    el.className = 'inventory-slot';
+    el.dataset.selected = (this.inventorySelectedSlotIndex === index) ? 'true' : 'false';
+
+    if (!slot) {
+      el.dataset.empty = 'true';
+      el.addEventListener('click', () => {
+        this.inventorySelectedSlotIndex = null;
+        this.renderActiveSection();
+      });
+      return el;
+    }
+
+    const definition = this.inventoryStore?.getItemDefinition(slot.itemId);
+    if (!definition) {
+      el.dataset.empty = 'true';
+      return el;
+    }
+
+    const content = document.createElement('div');
+    content.className = 'inventory-slot-content';
+
+    const name = document.createElement('span');
+    name.className = 'inventory-slot-name';
+    name.textContent = definition.name;
+
+    const count = document.createElement('span');
+    count.className = 'inventory-slot-count';
+    count.textContent = slot.stackCount > 1 ? String(slot.stackCount) : '';
+
+    const tier = document.createElement('span');
+    tier.className = 'inventory-slot-tier';
+    tier.textContent = definition.tier;
+
+    content.append(name, count, tier);
+    el.appendChild(content);
+
+    el.addEventListener('click', () => {
+      this.inventorySelectedSlotIndex = index;
+      this.renderActiveSection();
+    });
+
+    el.draggable = true;
+    el.addEventListener('dragstart', (event) => {
+      event.dataTransfer!.setData('application/x-hotbar-source', 'inventory');
+      event.dataTransfer!.setData('application/x-inventory-slot', String(index));
+      event.dataTransfer!.effectAllowed = 'move';
+      el.classList.add('inventory-slot-dragging');
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('inventory-slot-dragging');
+    });
+
+    el.addEventListener('mouseenter', (event) => {
+      tooltipSystem.showRich(el, () => this.buildItemTooltipContent(definition), event.clientX, event.clientY);
+    });
+    el.addEventListener('mousemove', (event) => {
+      tooltipSystem.reposition(event.clientX, event.clientY);
+    });
+    el.addEventListener('mouseleave', () => {
+      tooltipSystem.hide(el);
+    });
+
+    return el;
+  }
+
+  private buildItemTooltipContent(definition: ItemDefinition): HTMLElement {
+    const root = document.createElement('div');
+
+    const name = document.createElement('div');
+    name.className = 'tooltip-name';
+    name.textContent = definition.name;
+
+    const type = document.createElement('div');
+    type.className = 'tooltip-type';
+    type.textContent = `${definition.tier} ${definition.type}`;
+
+    const desc = document.createElement('div');
+    desc.className = 'tooltip-desc';
+    desc.textContent = definition.description;
+
+    root.append(name, type, desc);
+
+    if (definition.statModifiers && definition.statModifiers.length > 0) {
+      const stats = document.createElement('div');
+      stats.className = 'tooltip-stats';
+      for (const mod of definition.statModifiers) {
+        const row = document.createElement('div');
+        row.className = 'tooltip-stat-row';
+        const label = document.createElement('span');
+        label.textContent = mod.stat;
+        const value = document.createElement('span');
+        const parts: string[] = [];
+        if (mod.additive) parts.push(`${mod.additive > 0 ? '+' : ''}${mod.additive}`);
+        if (mod.multiplier) parts.push(`x${mod.multiplier}`);
+        value.textContent = parts.join(' ');
+        row.append(label, value);
+        stats.appendChild(row);
+      }
+      root.appendChild(stats);
+    }
+
+    if (definition.damage) {
+      const dmg = document.createElement('div');
+      dmg.className = 'tooltip-stats';
+      dmg.textContent = `Damage: ${definition.damage}`;
+      root.appendChild(dmg);
+    }
+
+    return root;
   }
 
   private createPlaceholder(): HTMLElement {

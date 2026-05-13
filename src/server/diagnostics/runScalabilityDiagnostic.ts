@@ -170,9 +170,11 @@ function queueMovementCommands(simulationWorld: GameSimulation, playerIds: reado
       aimX: 5000 + i * 7,
       aimY: 5000 + tick * 3,
       attack: AttackIntent.None,
+      interact: false,
       sequence: tick,
       clientTick: tick,
       clientTimeMs: tick * commandIntervalMs,
+      hotbarSlotActivated: -1,
     });
   }
 }

@@ -320,6 +320,14 @@ export class GameRenderer {
       return;
     }
 
+    if (kind === NetEntityKind.Pickup) {
+      graphics.rect(-10, -10, 20, 20);
+      graphics.fill({ color: '#e3cf5b', alpha: 0.85 });
+      graphics.rect(-10, -10, 20, 20);
+      graphics.stroke({ color: '#f0e68c', width: 1.5, alpha: 0.9 });
+      return;
+    }
+
     graphics.ellipse(0, 0, 34, 42);
     graphics.fill(isLocal ? '#7aa2f7' : '#d44d5c');
     graphics.circle(facing >= 0 ? 11 : -11, -7, 5);

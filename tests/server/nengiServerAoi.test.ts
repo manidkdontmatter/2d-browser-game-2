@@ -166,5 +166,6 @@ function command(sequence: number): Record<string, unknown> {
     sequence,
     clientTick: sequence,
     clientTimeMs: sequence * 33,
+    hotbarSlotActivated: -1,
   };
 }
